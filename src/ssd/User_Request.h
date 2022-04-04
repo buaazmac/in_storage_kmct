@@ -10,7 +10,7 @@
 
 namespace SSD_Components
 {
-	enum class UserRequestType { READ, WRITE };
+	enum class UserRequestType { READ, WRITE, BREAD, BWRITE, COMPUTE, LOWERTX, UPPERTX };
 	class NVM_Transaction;
 	class User_Request
 	{
@@ -27,6 +27,7 @@ namespace SSD_Components
 
 		unsigned int Size_in_byte;
 		unsigned int SizeInSectors;
+		unsigned int ProcessLevel = 0;
 		UserRequestType Type;
 		stream_id_type Stream_id;
 		bool ToBeIgnored;

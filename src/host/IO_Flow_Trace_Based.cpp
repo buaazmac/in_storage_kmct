@@ -37,13 +37,41 @@ Host_IO_Request *IO_Flow_Trace_Based::Generate_next_request()
 		request->Type = Host_IO_Request_Type::WRITE;
 		STAT_generated_write_request_count++;
 	}
-	else
+	else if (current_trace_line[ASCIITraceTypeColumn].compare(ASCIITraceReadCode) == 0)
 	{
 		request->Type = Host_IO_Request_Type::READ;
 		STAT_generated_read_request_count++;
 	}
+	else if (current_trace_line[ASCIITraceTypeColumn].compare(ASCIITraceBufferReadCode) == 0)
+	{
+		request->Type = Host_IO_Request_Type::BREAD;
+		STAT_generated_bread_request_count++;
+	}
+	else if (current_trace_line[ASCIITraceTypeColumn].compare(ASCIITraceBufferWriteCode) == 0)
+	{
+		request->Type = Host_IO_Request_Type::BWRITE;
+		STAT_generated_bwrite_request_count++;
+	}
+	else if (current_trace_line[ASCIITraceTypeColumn].compare(ASCIITraceComputeCode) == 0)
+	{
+		request->Type = Host_IO_Request_Type::COMPUTE;
+		STAT_generated_compute_request_count++;
+	}
+	else if (current_trace_line[ASCIITraceTypeColumn].compare(ASCIITraceUpperTransferCode) == 0)
+	{
+		request->Type = Host_IO_Request_Type::UPPER_TX;
+		STAT_generated_uppertx_request_count++;
+	}
+	else if (current_trace_line[ASCIITraceTypeColumn].compare(ASCIITraceLowerTransferCode) == 0)
+	{
+		request->Type = Host_IO_Request_Type::LOWER_TX;
+		STAT_generated_lowertx_request_count++;
+	}
 
 	char *pEnd;
+	// ISP-KMC: Use the StreamID for the ISP level (StreamID is unused in the original code)
+	request->ISP_Level = std::strtoul(current_trace_line[ASCIITraceDeviceColumn].c_str(), &pEnd, 0);
+
 	request->LBA_count = std::strtoul(current_trace_line[ASCIITraceSizeColumn].c_str(), &pEnd, 0);
 
 	request->Start_LBA = std::strtoull(current_trace_line[ASCIITraceAddressColumn].c_str(), &pEnd, 0);

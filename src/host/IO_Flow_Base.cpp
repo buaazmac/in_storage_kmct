@@ -11,7 +11,8 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 						   HostInterface_Types SSD_device_type, PCIe_Root_Complex *pcie_root_complex, SATA_HBA *sata_hba,
 						   bool enabled_logging, sim_time_type logging_period, std::string logging_file_path) : MQSimEngine::Sim_Object(name), flow_id(flow_id), start_lsa_on_device(start_lsa_on_device), end_lsa_on_device(end_lsa_on_device), io_queue_id(io_queue_id),
 																												priority_class(priority_class), stop_time(stop_time), initial_occupancy_ratio(initial_occupancy_ratio), total_requests_to_be_generated(total_requets_to_be_generated), SSD_device_type(SSD_device_type), pcie_root_complex(pcie_root_complex), sata_hba(sata_hba),
-																												STAT_generated_request_count(0), STAT_generated_read_request_count(0), STAT_generated_write_request_count(0),
+																												STAT_generated_request_count(0), STAT_generated_read_request_count(0), STAT_generated_write_request_count(0), 
+																												STAT_generated_bread_request_count(0), STAT_generated_bwrite_request_count(0), STAT_generated_compute_request_count(0), STAT_generated_uppertx_request_count(0), STAT_generated_lowertx_request_count(0),
 																												STAT_ignored_request_count(0),
 																												STAT_serviced_request_count(0), STAT_serviced_read_request_count(0), STAT_serviced_write_request_count(0),
 																												STAT_sum_device_response_time(0), STAT_sum_device_response_time_read(0), STAT_sum_device_response_time_write(0),
@@ -390,11 +391,56 @@ IO_Flow_Base::IO_Flow_Base(const sim_object_id_type &name, uint16_t flow_id, LHA
 			sqe->Command_specific[2] = ((uint32_t)((uint16_t)request->LBA_count)) & (uint32_t)(0x0000ffff);
 			sqe->PRP_entry_1 = (DATA_MEMORY_REGION);//Dummy addresses, just to emulate data read/write access
 			sqe->PRP_entry_2 = (DATA_MEMORY_REGION + 0x1000);//Dummy addresses
-		} else {
+		} else if (request->Type == Host_IO_Request_Type::WRITE) {
 			sqe->Opcode = NVME_WRITE_OPCODE;
 			sqe->Command_specific[0] = (uint32_t)request->Start_LBA;
 			sqe->Command_specific[1] = (uint32_t)(request->Start_LBA >> 32);
 			sqe->Command_specific[2] = ((uint32_t)((uint16_t)request->LBA_count)) & (uint32_t)(0x0000ffff);
+			sqe->PRP_entry_1 = (DATA_MEMORY_REGION);//Dummy addresses, just to emulate data read/write access
+			sqe->PRP_entry_2 = (DATA_MEMORY_REGION + 0x1000);//Dummy addresses
+		}
+		else if (request->Type == Host_IO_Request_Type::BREAD) {
+			sqe->Opcode = NVME_BREAD_OPCODE;
+			sqe->Command_specific[0] = (uint32_t)request->Start_LBA;
+			sqe->Command_specific[1] = (uint32_t)(request->Start_LBA >> 32);
+			sqe->Command_specific[2] = ((uint32_t)(request->LBA_count));
+			sqe->Command_specific[3] = (uint32_t)request->ISP_Level;
+			sqe->PRP_entry_1 = (DATA_MEMORY_REGION);//Dummy addresses, just to emulate data read/write access
+			sqe->PRP_entry_2 = (DATA_MEMORY_REGION + 0x1000);//Dummy addresses
+		}
+		else if (request->Type == Host_IO_Request_Type::BWRITE) {
+			sqe->Opcode = NVME_BWRITE_OPCODE;
+			sqe->Command_specific[0] = (uint32_t)request->Start_LBA;
+			sqe->Command_specific[1] = (uint32_t)(request->Start_LBA >> 32);
+			sqe->Command_specific[2] = ((uint32_t)(request->LBA_count));
+			sqe->Command_specific[3] = (uint32_t)request->ISP_Level;
+			sqe->PRP_entry_1 = (DATA_MEMORY_REGION);//Dummy addresses, just to emulate data read/write access
+			sqe->PRP_entry_2 = (DATA_MEMORY_REGION + 0x1000);//Dummy addresses
+		}
+		else if (request->Type == Host_IO_Request_Type::COMPUTE) {
+			sqe->Opcode = NVME_COMPUTE_OPCODE;
+			sqe->Command_specific[0] = (uint32_t)request->Start_LBA;
+			sqe->Command_specific[1] = (uint32_t)(request->Start_LBA >> 32);
+			sqe->Command_specific[2] = ((uint32_t)(request->LBA_count));
+			sqe->Command_specific[3] = (uint32_t)request->ISP_Level;
+			sqe->PRP_entry_1 = (DATA_MEMORY_REGION);//Dummy addresses, just to emulate data read/write access
+			sqe->PRP_entry_2 = (DATA_MEMORY_REGION + 0x1000);//Dummy addresses
+		}
+		else if (request->Type == Host_IO_Request_Type::LOWER_TX) {
+			sqe->Opcode = NVME_LOWERTX_OPCODE;
+			sqe->Command_specific[0] = (uint32_t)request->Start_LBA;
+			sqe->Command_specific[1] = (uint32_t)(request->Start_LBA >> 32);
+			sqe->Command_specific[2] = ((uint32_t)(request->LBA_count));
+			sqe->Command_specific[3] = (uint32_t)request->ISP_Level;
+			sqe->PRP_entry_1 = (DATA_MEMORY_REGION);//Dummy addresses, just to emulate data read/write access
+			sqe->PRP_entry_2 = (DATA_MEMORY_REGION + 0x1000);//Dummy addresses
+		}
+		else if (request->Type == Host_IO_Request_Type::UPPER_TX) {
+			sqe->Opcode = NVME_UPPERTX_OPCODE;
+			sqe->Command_specific[0] = (uint32_t)request->Start_LBA;
+			sqe->Command_specific[1] = (uint32_t)(request->Start_LBA >> 32);
+			sqe->Command_specific[2] = ((uint32_t)(request->LBA_count));
+			sqe->Command_specific[3] = (uint32_t)request->ISP_Level;
 			sqe->PRP_entry_1 = (DATA_MEMORY_REGION);//Dummy addresses, just to emulate data read/write access
 			sqe->PRP_entry_2 = (DATA_MEMORY_REGION + 0x1000);//Dummy addresses
 		}

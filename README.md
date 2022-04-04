@@ -1,5 +1,20 @@
 # MQSim: A Simulator for Modern NVMe and SATA SSDs
 
+## [ZMAC] In-storage processing trace [time, device, addr, size, optype]
+We introduce several new commands for in-storage processing
+"2": read data into ISP buffer
+"3": write ISP buffer data back to storage
+"4": ISP compute
+"5": transfer ISP data to the upper level ISP buffer
+"6": transfer ISP data to the lower level ISP buffer
+
+For ISP commands, DeviceID indicates the level of ISP
+0: ssd-level ISP
+1: channel-level ISP
+2: chip-level ISP
+3: die-level ISP
+
+The execution time of ISP compute can be calculated by the size of data
 
 ## Usage in Linux
 Run following commands:

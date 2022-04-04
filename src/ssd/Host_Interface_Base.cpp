@@ -7,7 +7,8 @@ namespace SSD_Components
 		STAT_number_of_read_requests(0), STAT_number_of_write_requests(0), 
 		STAT_number_of_read_transactions(0), STAT_number_of_write_transactions(0),
 		STAT_sum_of_read_transactions_execution_time(0), STAT_sum_of_read_transactions_transfer_time(0), STAT_sum_of_read_transactions_waiting_time(0),
-		STAT_sum_of_write_transactions_execution_time(0), STAT_sum_of_write_transactions_transfer_time(0), STAT_sum_of_write_transactions_waiting_time(0)
+		STAT_sum_of_write_transactions_execution_time(0), STAT_sum_of_write_transactions_transfer_time(0), STAT_sum_of_write_transactions_waiting_time(0),
+		STAT_sum_of_isp_transactions_execution_time(0), STAT_sum_of_isp_transactions_transfer_time(0), STAT_sum_of_isp_transactions_waiting_time(0)
 	{}
 	
 	Input_Stream_Manager_Base::~Input_Stream_Manager_Base()
@@ -110,6 +111,11 @@ namespace SSD_Components
 				this->input_streams[transaction->Stream_id]->STAT_sum_of_write_transactions_execution_time += transaction->STAT_execution_time;
 				this->input_streams[transaction->Stream_id]->STAT_sum_of_write_transactions_transfer_time += transaction->STAT_transfer_time;
 				this->input_streams[transaction->Stream_id]->STAT_sum_of_write_transactions_waiting_time += (Simulator->Time() - transaction->Issue_time) - transaction->STAT_execution_time - transaction->STAT_transfer_time;
+				break;
+			case Transaction_Type::ISP:
+				this->input_streams[transaction->Stream_id]->STAT_sum_of_isp_transactions_execution_time += transaction->STAT_execution_time;
+				this->input_streams[transaction->Stream_id]->STAT_sum_of_isp_transactions_transfer_time += transaction->STAT_transfer_time;
+				this->input_streams[transaction->Stream_id]->STAT_sum_of_isp_transactions_waiting_time += (Simulator->Time() - transaction->Issue_time) - transaction->STAT_execution_time - transaction->STAT_transfer_time;
 				break;
 			default:
 				break;

@@ -130,6 +130,8 @@ namespace SSD_Components {
 	
 	void NVM_PHY_ONFI_NVDDR2::Send_command_to_chip(std::list<NVM_Transaction_Flash*>& transaction_list)
 	{
+		// [ISP] here we need to update the statistics of chip for ISP command
+		
 		ONFI_Channel_NVDDR2* target_channel = channels[transaction_list.front()->Address.ChannelID];
 
 		NVM::FlashMemory::Flash_Chip* targetChip = target_channel->Chips[transaction_list.front()->Address.ChipID];
@@ -153,6 +155,10 @@ namespace SSD_Components {
 					case Transaction_Type::ERASE:
 						Stats::IssuedSuspendEraseCMD++;
 						suspendTime = target_channel->EraseSuspendCommandTime + targetChip->GetSuspendEraseTime();
+						break;
+					case Transaction_Type::ISP:
+						Stats::IssuedSuspendIspCMD++;
+						std::cout << "[ISP] find a ISP suspension!" << std::endl;
 						break;
 					default:
 						PRINT_ERROR("Read suspension is not supported!")
@@ -179,6 +185,70 @@ namespace SSD_Components {
 		}
 
 		switch (transaction_list.front()->Type) {
+			case Transaction_Type::ISP:
+			{
+				auto req_type = transaction_list.front()->UserIORequest->Type;
+				Stats::IssuedIspCMD++;
+				if (req_type == UserRequestType::BREAD) {
+					dieBKE->ActiveCommand->CommandCode = CMD_ISP_BUFFER_READ;
+					if (chipBKE->OngoingDieCMDTransfers.size() == 0) {
+						targetChip->StartCMDXfer();
+						chipBKE->Status = ChipStatus::CMD_IN;
+						chipBKE->Last_transfer_finish_time = Simulator->Time() + suspendTime + target_channel->ReadCommandTime[transaction_list.size()];
+						Simulator->Register_sim_event(Simulator->Time() + suspendTime + target_channel->ReadCommandTime[transaction_list.size()], this,
+							dieBKE, (int)NVDDR2_SimEventType::BREAD_CMD_ADDR_TRANSFERRED);
+					}
+					else {
+						dieBKE->DieInterleavedTime = suspendTime + target_channel->ReadCommandTime[transaction_list.size()];
+						chipBKE->Last_transfer_finish_time += suspendTime + target_channel->ReadCommandTime[transaction_list.size()];
+					}
+					chipBKE->OngoingDieCMDTransfers.push(dieBKE);
+					dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].PageID);
+					if (chipBKE->Expected_command_exec_finish_time < dieBKE->Expected_finish_time) {
+						chipBKE->Expected_command_exec_finish_time = dieBKE->Expected_finish_time;
+					}
+				}
+				else if (req_type == UserRequestType::BWRITE) {
+					dieBKE->ActiveCommand->CommandCode = CMD_ISP_BUFFER_WRITE;
+					sim_time_type data_transfer_time = 0;
+
+					for (std::list<NVM_Transaction_Flash*>::iterator it = transaction_list.begin();
+						it != transaction_list.end(); it++) {
+						// [ISP] transfer time between the buffer and the die
+						(*it)->STAT_transfer_time += target_channel->ProgramCommandTime[transaction_list.size()];
+						data_transfer_time += (*it)->Data_and_metadata_size_in_byte / targetChip->isp_bandwidth; // 
+					}
+					if (chipBKE->OngoingDieCMDTransfers.size() == 0) {
+						targetChip->StartCMDDataInXfer();
+						chipBKE->Status = ChipStatus::CMD_DATA_IN;
+						chipBKE->Last_transfer_finish_time = Simulator->Time() + suspendTime + target_channel->ProgramCommandTime[transaction_list.size()] + data_transfer_time;
+						Simulator->Register_sim_event(Simulator->Time() + suspendTime + target_channel->ProgramCommandTime[transaction_list.size()] + data_transfer_time,
+							this, dieBKE, (int)NVDDR2_SimEventType::BWRITE_CMD_ADDR_DATA_TRANSFERRED); // BUFFER WRITE should be the same
+					}
+					else {
+						dieBKE->DieInterleavedTime = suspendTime + target_channel->ProgramCommandTime[transaction_list.size()] + data_transfer_time;
+						chipBKE->Last_transfer_finish_time += suspendTime + target_channel->ProgramCommandTime[transaction_list.size()] + data_transfer_time;
+					}
+					chipBKE->OngoingDieCMDTransfers.push(dieBKE);
+
+					dieBKE->Expected_finish_time = chipBKE->Last_transfer_finish_time + targetChip->Get_command_execution_latency(dieBKE->ActiveCommand->CommandCode, dieBKE->ActiveCommand->Address[0].PageID);
+					if (chipBKE->Expected_command_exec_finish_time < dieBKE->Expected_finish_time) {
+						chipBKE->Expected_command_exec_finish_time = dieBKE->Expected_finish_time;
+					}
+				}
+				else if (req_type == UserRequestType::COMPUTE) {
+					dieBKE->ActiveCommand->CommandCode = CMD_ISP_COMPUTE;
+					sim_time_type compute_time = 0;
+				}
+				else if (req_type == UserRequestType::UPPERTX) { // The chip-level command doesn't have lower transfer
+					dieBKE->ActiveCommand->CommandCode = CMD_ISP_UPPER_TRANSFER;
+				}
+				for (std::list<NVM_Transaction_Flash*>::iterator it = transaction_list.begin();
+					it != transaction_list.end(); it++) {
+					(*it)->STAT_transfer_time += target_channel->ReadCommandTime[transaction_list.size()];
+				}
+				break;
+			}
 			case Transaction_Type::READ:
 				if (transaction_list.size() == 1) {
 					Stats::IssuedReadCMD++;
@@ -342,6 +412,7 @@ namespace SSD_Components {
 		ChipBookKeepingEntry *chipBKE = &bookKeepingTable[channel_id][targetChip->ChipID];
 
 		switch ((NVDDR2_SimEventType)ev->Type) {
+			case NVDDR2_SimEventType::BREAD_CMD_ADDR_TRANSFERRED:
 			case NVDDR2_SimEventType::READ_CMD_ADDR_TRANSFERRED:
 				//DEBUG2("Chip " << targetChip->ChannelID << ", " << targetChip->ChipID << ", " << dieBKE->ActiveTransactions.front()->Address.DieID << ": READ_CMD_ADDR_TRANSFERRED ")
 				targetChip->EndCMDXfer(dieBKE->ActiveCommand);
@@ -374,6 +445,7 @@ namespace SSD_Components {
 					targetChannel->SetStatus(BusChannelStatus::IDLE, targetChip);
 				}
 				break;
+			case NVDDR2_SimEventType::BWRITE_CMD_ADDR_DATA_TRANSFERRED:
 			case NVDDR2_SimEventType::PROGRAM_CMD_ADDR_DATA_TRANSFERRED:
 			case NVDDR2_SimEventType::PROGRAM_COPYBACK_CMD_ADDR_TRANSFERRED:
 				//DEBUG2("Chip " << targetChip->ChannelID << ", " << targetChip->ChipID << ", " << dieBKE->ActiveTransactions.front()->Address.DieID <<  ": PROGRAM_CMD_ADDR_DATA_TRANSFERRED " )
@@ -427,6 +499,30 @@ namespace SSD_Components {
 					}
 				}
 				targetChannel->SetStatus(BusChannelStatus::IDLE, targetChip);
+				break;
+			case NVDDR2_SimEventType::BREAD_COMPLETED:
+				for (std::list<NVM_Transaction_Flash*>::iterator it = dieBKE->ActiveTransactions.begin();
+					it != dieBKE->ActiveTransactions.end(); it++) {
+						broadcastTransactionServicedSignal(*it);
+				}
+				dieBKE->ActiveTransactions.clear();
+				dieBKE->ClearCommand();
+				chipBKE->Status = ChipStatus::IDLE;
+				if (targetChannel->GetStatus() == BusChannelStatus::BUSY) {
+					return;
+				}
+				break;
+			case NVDDR2_SimEventType::BWRITE_COMPLETED:
+				for (std::list<NVM_Transaction_Flash*>::iterator it = dieBKE->ActiveTransactions.begin();
+					it != dieBKE->ActiveTransactions.end(); it++) {
+					broadcastTransactionServicedSignal(*it);
+				}
+				dieBKE->ActiveTransactions.clear();
+				dieBKE->ClearCommand();
+				chipBKE->Status = ChipStatus::IDLE;
+				if (targetChannel->GetStatus() == BusChannelStatus::BUSY) {
+					return;
+				}
 				break;
 			default:
 				PRINT_ERROR("Unknown simulation event specified for NVM_PHY_ONFI_NVDDR2!")
@@ -489,11 +585,27 @@ namespace SSD_Components {
 
 	inline void NVM_PHY_ONFI_NVDDR2::handle_ready_signal_from_chip(NVM::FlashMemory::Flash_Chip* chip, NVM::FlashMemory::Flash_Command* command)
 	{
+		// [ISP] We need to handle the update operations for ISP commands HERE
+
 		ChipBookKeepingEntry *chipBKE = &_my_instance->bookKeepingTable[chip->ChannelID][chip->ChipID];
 		DieBookKeepingEntry *dieBKE = &(chipBKE->Die_book_keeping_records[command->Address[0].DieID]);
 
 		switch (command->CommandCode)
 		{
+		case CMD_ISP_BUFFER_READ:
+			Simulator->Register_sim_event(Simulator->Time() + ISP_BUFFER_READ_TIME, _my_instance, dieBKE, (int)NVDDR2_SimEventType::BREAD_COMPLETED);
+			chipBKE->No_of_active_dies--;
+			break;
+		case CMD_ISP_BUFFER_WRITE:
+			Simulator->Register_sim_event(Simulator->Time() + ISP_BUFFER_WRITE_TIME, _my_instance, dieBKE, (int)NVDDR2_SimEventType::BWRITE_COMPLETED);
+			chipBKE->No_of_active_dies--;
+			break;
+		case CMD_ISP_COMPUTE:
+			break;
+		case CMD_ISP_LOWER_TRANSFER:
+			break;
+		case CMD_ISP_UPPER_TRANSFER:
+			break;
 		case CMD_READ_PAGE:
 		case CMD_READ_PAGE_MULTIPLANE:
 			DEBUG("Chip " << chip->ChannelID << ", " << chip->ChipID << ": finished  read command")

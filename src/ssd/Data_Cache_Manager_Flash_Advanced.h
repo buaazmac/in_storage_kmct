@@ -44,6 +44,14 @@ namespace SSD_Components
 		unsigned int sector_no_per_page;
 		Data_Cache_Flash** per_stream_cache;
 		bool memory_channel_is_busy;
+
+		// [ISP] ISP DRAM buffer stats
+		unsigned int memory_footprint = 0;
+		unsigned int max_memory_footprint = 0;
+		int n_memory_channels_used = 0;
+		unsigned int total_dram_access_size = 0;
+		bool first_dram_access = true;
+		sim_time_type total_dram_access_time = 0, total_dram_idle_time = 0, last_dram_access_time = 0;
 		
 		void process_new_user_request(User_Request* user_request);
 		void write_to_destage_buffer(User_Request* user_request);//Used in the WRITE_CACHE and WRITE_READ_CACHE modes in which the DRAM space is used as a destage buffer

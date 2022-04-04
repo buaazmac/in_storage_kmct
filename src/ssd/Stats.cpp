@@ -3,6 +3,8 @@
 
 namespace SSD_Components
 {
+	// [ISP]
+	unsigned long Stats::IssuedIspCMD = 0;
 	unsigned long Stats::IssuedReadCMD = 0;
 	unsigned long Stats::IssuedCopybackReadCMD = 0;
 	unsigned long Stats::IssuedInterleaveReadCMD = 0;
@@ -20,6 +22,7 @@ namespace SSD_Components
 	unsigned long Stats::IssuedMultiplaneEraseCMD = 0;
 	unsigned long Stats::IssuedInterleaveMultiplaneEraseCMD = 0;
 	unsigned long Stats::IssuedSuspendEraseCMD = 0;
+	unsigned long Stats::IssuedSuspendIspCMD = 0;
 	unsigned long Stats::Total_flash_reads_for_mapping = 0;
 	unsigned long Stats::Total_flash_writes_for_mapping = 0;
 	unsigned long Stats::Total_flash_reads_for_mapping_per_stream[MAX_SUPPORT_STREAMS] = { 0 };

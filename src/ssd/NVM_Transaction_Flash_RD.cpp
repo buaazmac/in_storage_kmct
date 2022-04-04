@@ -35,4 +35,13 @@ namespace SSD_Components
 		Content(content), RelatedWrite(NULL), read_sectors_bitmap(read_sectors_bitmap), DataTimeStamp(data_timestamp)
 	{
 	}
+
+	// [ISP]
+	NVM_Transaction_Flash_ISP::NVM_Transaction_Flash_ISP(Transaction_Source_Type source, stream_id_type stream_id,
+		unsigned int data_size_in_byte, LPA_type lpa, PPA_type ppa, SSD_Components::User_Request* related_user_IO_request, IO_Flow_Priority_Class::Priority priority_class,
+		NVM::memory_content_type content, page_status_type read_sectors_bitmap, data_timestamp_type data_timestamp) :
+		NVM_Transaction_Flash(source, Transaction_Type::ISP, stream_id, data_size_in_byte, lpa, ppa, related_user_IO_request, priority_class),
+		Content(content), RelatedWrite(NULL), read_sectors_bitmap(read_sectors_bitmap), DataTimeStamp(data_timestamp)
+	{
+	}
 }

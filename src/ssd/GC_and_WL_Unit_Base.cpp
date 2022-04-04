@@ -55,6 +55,8 @@ namespace SSD_Components
 					case Transaction_Type::WRITE:
 						_my_instance->block_manager->Program_transaction_serviced(transaction->Address);
 						break;
+					case Transaction_Type::ISP:
+						break;
 					default:
 						PRINT_ERROR("Unexpected situation in the GC_and_WL_Unit_Base function!")
 				}

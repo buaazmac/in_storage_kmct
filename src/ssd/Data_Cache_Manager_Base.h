@@ -13,7 +13,7 @@ namespace SSD_Components
 {
 	class NVM_Firmware;
 	class Host_Interface_Base;
-	enum class Caching_Mode {WRITE_CACHE, READ_CACHE, WRITE_READ_CACHE, TURNED_OFF};
+	enum class Caching_Mode {WRITE_CACHE, READ_CACHE, WRITE_READ_CACHE, TURNED_OFF, IN_STORAGE_PROCESSING};
 	enum class Caching_Mechanism { SIMPLE, ADVANCED };
 	//How the cache space is shared among the concurrently running I/O flows/streams
 	enum class Cache_Sharing_Mode { SHARED,//each application has access to the entire cache space
@@ -67,6 +67,8 @@ namespace SSD_Components
 		const unsigned int dram_row_size, const unsigned int dram_burst_size_in_bytes, const double dram_burst_transfer_time_ddr,
 		const sim_time_type tRCD, const sim_time_type tCL, const sim_time_type tRP)
 	{
+		// [ISP DEBUG]
+		//if (memory_access_size_in_byte > 0) return 2;
 		if (memory_access_size_in_byte <= dram_row_size) {
 			return (sim_time_type)(tRCD + tCL + sim_time_type((double)(memory_access_size_in_byte / dram_burst_size_in_bytes / 2) * dram_burst_transfer_time_ddr));
 		}

@@ -36,10 +36,19 @@ namespace SSD_Components
 		virtual ~Input_Stream_Base();
 		unsigned int STAT_number_of_read_requests;
 		unsigned int STAT_number_of_write_requests;
+		// stats for ISP requests
+		unsigned int STAT_number_of_buffer_requests;
+		unsigned int STAT_number_of_compute_requests;
+		unsigned int STAT_number_of_transfer_requests;
 		unsigned int STAT_number_of_read_transactions;
 		unsigned int STAT_number_of_write_transactions;
+		// stats for ISP transactions
+		unsigned int STAT_number_of_buffer_transactions;
+		unsigned int STAT_number_of_compute_transactions;
+		unsigned int STAT_number_of_transfer_transactions;
 		sim_time_type STAT_sum_of_read_transactions_execution_time, STAT_sum_of_read_transactions_transfer_time, STAT_sum_of_read_transactions_waiting_time;
 		sim_time_type STAT_sum_of_write_transactions_execution_time, STAT_sum_of_write_transactions_transfer_time, STAT_sum_of_write_transactions_waiting_time;
+		sim_time_type STAT_sum_of_isp_transactions_execution_time, STAT_sum_of_isp_transactions_transfer_time, STAT_sum_of_isp_transactions_waiting_time;
 	};
 
 	class Input_Stream_Manager_Base

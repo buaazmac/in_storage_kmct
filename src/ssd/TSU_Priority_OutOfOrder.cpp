@@ -41,6 +41,12 @@ TSU_Priority_OutOfOrder::TSU_Priority_OutOfOrder(const sim_object_id_type &id,
     nextPriorityClassWrite = new IO_Flow_Priority_Class::Priority * [channel_count];
     currentWeightRead = new int* [channel_count];
     currentWeightWrite = new int *[channel_count];
+
+    // [ISP]
+    UserIspTRQueueDie = new Flash_Transaction_Queue **[channel_count];
+    UserIspTRQueueChip = new Flash_Transaction_Queue * [channel_count];
+    UserIspTRQueueChannel = new Flash_Transaction_Queue[channel_count];
+
     for (unsigned int channelID = 0; channelID < channel_count; channelID++)
     {
         UserReadTRQueue[channelID] = new Flash_Transaction_Queue *[chip_no_per_channel];
@@ -54,6 +60,11 @@ TSU_Priority_OutOfOrder::TSU_Priority_OutOfOrder(const sim_object_id_type &id,
         nextPriorityClassWrite[channelID] = new IO_Flow_Priority_Class::Priority[chip_no_per_channel];
         currentWeightRead[channelID] = new int[chip_no_per_channel];
         currentWeightWrite[channelID] = new int[chip_no_per_channel];
+
+        // [ISP]
+        UserIspTRQueueDie[channelID] = new Flash_Transaction_Queue * [chip_no_per_channel];
+        UserIspTRQueueChip[channelID] = new Flash_Transaction_Queue[chip_no_per_channel];
+
         for (unsigned int chipId = 0; chipId < chip_no_per_channel; chipId++)
         {
             UserReadTRQueue[channelID][chipId] = new Flash_Transaction_Queue[IO_Flow_Priority_Class::NUMBER_OF_PRIORITY_LEVELS];
@@ -62,6 +73,9 @@ TSU_Priority_OutOfOrder::TSU_Priority_OutOfOrder(const sim_object_id_type &id,
             nextPriorityClassWrite[channelID][chipId] = IO_Flow_Priority_Class::URGENT;
             currentWeightRead[channelID][chipId] = IO_Flow_Priority_Class::get_scheduling_weight(IO_Flow_Priority_Class::HIGH);
             currentWeightWrite[channelID][chipId] = IO_Flow_Priority_Class::get_scheduling_weight(IO_Flow_Priority_Class::HIGH);
+            // [ISP] The priority levels may not be needed here
+            UserIspTRQueueDie[channelID][chipId] = new Flash_Transaction_Queue[die_no_per_chip];
+
             for (unsigned int priorityClass = 0; priorityClass < IO_Flow_Priority_Class::NUMBER_OF_PRIORITY_LEVELS; priorityClass++)
             {
                 UserReadTRQueue[channelID][chipId][priorityClass].Set_id("User_Read_TR_Queue@" + std::to_string(channelID) + "@" + std::to_string(chipId) + "@" + IO_Flow_Priority_Class::to_string(priorityClass));
@@ -265,6 +279,20 @@ void TSU_Priority_OutOfOrder::Schedule()
                 PRINT_ERROR("TSU_OutOfOrder: unknown source type for a write transaction!")
             }
             break;
+        case Transaction_Type::ISP:
+            if ((*it)->UserIORequest->ProcessLevel == 3) {
+                UserIspTRQueueDie[(*it)->Address.ChannelID][(*it)->Address.ChipID][(*it)->Address.DieID].push_back((*it));
+            }
+            else if ((*it)->UserIORequest->ProcessLevel == 2) {
+                UserIspTRQueueChip[(*it)->Address.ChannelID][(*it)->Address.ChipID].push_back((*it));
+            } 
+            else if ((*it)->UserIORequest->ProcessLevel == 1) {
+                UserIspTRQueueChannel[(*it)->Address.ChannelID].push_back((*it));
+            }
+            else if ((*it)->UserIORequest->ProcessLevel == 0) {
+                UserIspTRQueueSSD.push_back((*it));
+            }
+            break;
         case Transaction_Type::ERASE:
             GCEraseTRQueue[(*it)->Address.ChannelID][(*it)->Address.ChipID].push_back((*it));
             break;
@@ -273,6 +301,13 @@ void TSU_Priority_OutOfOrder::Schedule()
         }
     }
 
+    /* Add the logic for ISP transactions 
+       1. If the channel is idle
+          -> we first schedule chip-level transactions
+          -> we then schedule channel-level transactions
+       2. We schedule the ssd-level transactions
+          -> ssd-level transactions should have different logic
+    */
     for (flash_channel_ID_type channelID = 0; channelID < channel_count; channelID++)
     {
         if (_NVMController->Get_channel_status(channelID) == BusChannelStatus::IDLE)
@@ -285,7 +320,11 @@ void TSU_Priority_OutOfOrder::Schedule()
                 {
                     if (!service_write_transaction(chip))
                     {
-                        service_erase_transaction(chip);
+                        if (!service_erase_transaction(chip)) {
+                            // [ISP] If we have normal ssd transactions, first schedule them
+                            //       Otherwise, we schedule ISP transactions
+                            service_isp_chip_transaction(chip);
+                        }
                     }
                 }
                 Round_robin_turn_of_channel[channelID] = (flash_chip_ID_type)(Round_robin_turn_of_channel[channelID] + 1) % chip_no_per_channel;
@@ -294,8 +333,37 @@ void TSU_Priority_OutOfOrder::Schedule()
                     break;
                 }
             }
+            if (_NVMController->Get_channel_status(channelID) != BusChannelStatus::IDLE)
+            {
+                service_isp_channel_transaction(channelID);
+            }
         }
     }
+
+    service_isp_ssd_transaction();
+}
+
+bool TSU_Priority_OutOfOrder::service_isp_chip_transaction(NVM::FlashMemory::Flash_Chip* chip) {
+    if (_NVMController->GetChipStatus(chip) != ChipStatus::IDLE)
+    {
+        return false;
+    }
+    Flash_Transaction_Queue* source_queue = &UserIspTRQueueChip[chip->ChannelID][chip->ChipID];
+    if (source_queue->size() == 0) {
+        return false;
+    }
+    issue_command_to_chip(source_queue, NULL, Transaction_Type::ISP, false);
+    return true;
+}
+
+bool TSU_Priority_OutOfOrder::service_isp_channel_transaction(flash_channel_ID_type channelID) {
+
+    return true;
+}
+
+bool TSU_Priority_OutOfOrder::service_isp_ssd_transaction() {
+
+    return true;
 }
 
 Flash_Transaction_Queue *TSU_Priority_OutOfOrder::get_next_read_service_queue(NVM::FlashMemory::Flash_Chip *chip)
@@ -401,6 +469,7 @@ bool TSU_Priority_OutOfOrder::service_read_transaction(NVM::FlashMemory::Flash_C
 
     bool suspensionRequired = false;
     ChipStatus cs = _NVMController->GetChipStatus(chip);
+
     switch (cs)
     {
     case ChipStatus::IDLE:

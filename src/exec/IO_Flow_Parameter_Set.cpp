@@ -42,6 +42,9 @@ void IO_Flow_Parameter_Set::XML_serialize(Utils::XmlWriter& xmlwriter)
 		case SSD_Components::Caching_Mode::WRITE_READ_CACHE:
 			val = "WRITE_READ_CACHE";
 			break;
+		case SSD_Components::Caching_Mode::IN_STORAGE_PROCESSING:
+			val = "IN_STORAGE_PROCESSING";
+			break;
 	}
 	xmlwriter.Write_attribute_string(attr, val);
 
@@ -105,6 +108,9 @@ void IO_Flow_Parameter_Set::XML_deserialize(rapidxml::xml_node<> *node)
 					Device_Level_Data_Caching_Mode = SSD_Components::Caching_Mode::READ_CACHE;
 				} else if (strcmp(val.c_str(), "WRITE_READ_CACHE") == 0) {
 					Device_Level_Data_Caching_Mode = SSD_Components::Caching_Mode::WRITE_READ_CACHE;
+				}
+				else if (strcmp(val.c_str(), "IN_STORAGE_PROCESSING") == 0) {
+					Device_Level_Data_Caching_Mode = SSD_Components::Caching_Mode::IN_STORAGE_PROCESSING;
 				} else {
 					PRINT_ERROR("Wrong caching mode definition for input flow")
 				}

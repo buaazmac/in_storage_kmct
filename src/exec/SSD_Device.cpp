@@ -197,6 +197,9 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 		unsigned int stream_count = 0;
 		for (unsigned int i = 0; i < io_flows->size(); i++)
 		{
+			// [ISP-DEBUG]
+			std::cout << "Initializing IO " << i << std::endl;
+
 			switch (parameters->HostInterface_Type)
 			{
 			case HostInterface_Types::SATA:

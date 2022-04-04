@@ -484,6 +484,8 @@ namespace SSD_Components
 			if (is_lpa_locked_for_gc((*it)->Stream_id, ((NVM_Transaction_Flash*)(*it))->LPA)) {
 				//iterator should be post-incremented since the iterator may be deleted from list
 				manage_user_transaction_facing_barrier((NVM_Transaction_Flash*)*(it++));
+				// [ISP] Debug
+				std::cout << "Here we have a GC locked Transaction!" << std::endl;
 			} else {
 				query_cmt((NVM_Transaction_Flash*)(*it++));
 			}
@@ -513,7 +515,15 @@ namespace SSD_Components
 		Stats::total_CMT_queries++;
 		Stats::total_CMT_queries_per_stream[stream_id]++;
 
-		if (domains[stream_id]->Mapping_entry_accessible(ideal_mapping_table, stream_id, transaction->LPA))//Either limited or unlimited CMT
+		// [ISP] We don't need to check the original mapping table for ISP operations?
+		// TODO: we need to create a mapping table ISP data
+		bool is_isp = false;
+		if (transaction->UserIORequest->Type != UserRequestType::READ &&
+			transaction->UserIORequest->Type != UserRequestType::WRITE) {
+			is_isp = true;
+		}
+
+		if (is_isp || domains[stream_id]->Mapping_entry_accessible(ideal_mapping_table, stream_id, transaction->LPA))//Either limited or unlimited CMT
 		{
 			Stats::CMT_hits_per_stream[stream_id]++;
 			Stats::CMT_hits++;
@@ -522,14 +532,18 @@ namespace SSD_Components
 				Stats::total_readTR_CMT_queries++;
 				Stats::readTR_CMT_hits_per_stream[stream_id]++;
 				Stats::readTR_CMT_hits++;
-			} else {
+			} else if (transaction->Type == Transaction_Type::WRITE) {
 				//This is a write transaction
 				Stats::total_writeTR_CMT_queries++;
 				Stats::total_writeTR_CMT_queries_per_stream[stream_id]++;
 				Stats::writeTR_CMT_hits++;
 				Stats::writeTR_CMT_hits_per_stream[stream_id]++;
 			}
+			else {
+				// [ISP] This is an ISP transaction
+			}
 
+			// [ISP] We pass ISP transactions to this function
 			if (translate_lpa_to_ppa(stream_id, transaction)) {
 				return true;
 			} else {
@@ -583,7 +597,11 @@ namespace SSD_Components
 	*/
 	bool Address_Mapping_Unit_Page_Level::translate_lpa_to_ppa(stream_id_type streamID, NVM_Transaction_Flash* transaction)
 	{
-		PPA_type ppa = domains[streamID]->Get_ppa(ideal_mapping_table, streamID, transaction->LPA);
+		PPA_type ppa;
+		if (transaction->Type == Transaction_Type::READ || transaction->Type == Transaction_Type::WRITE)
+			ppa = domains[streamID]->Get_ppa(ideal_mapping_table, streamID, transaction->LPA);
+		else
+			ppa = transaction->LPA;
 
 		if (transaction->Type == Transaction_Type::READ) {
 			if (ppa == NO_PPA) {
@@ -595,7 +613,7 @@ namespace SSD_Components
 			transaction->Physical_address_determined = true;
 			
 			return true;
-		} else {//This is a write transaction
+		} else if (transaction->Type == Transaction_Type::WRITE) {//This is a write transaction
 			allocate_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction);
 			//there are too few free pages remaining only for GC
 			if (ftl->GC_and_WL_Unit->Stop_servicing_writes(transaction->Address)){
@@ -604,6 +622,12 @@ namespace SSD_Components
 			allocate_page_in_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction, false);
 			transaction->Physical_address_determined = true;
 			
+			return true;
+		}
+		else {
+			transaction->PPA = ppa;
+			Convert_ppa_to_address(transaction->PPA, transaction->Address);
+			transaction->Physical_address_determined = true;
 			return true;
 		}
 	}

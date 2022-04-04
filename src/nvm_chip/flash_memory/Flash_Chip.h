@@ -30,6 +30,8 @@ namespace NVM
 			~Flash_Chip();
 			flash_channel_ID_type ChannelID;
 			flash_chip_ID_type ChipID;         //Flashchip position in its related channel
+			sim_time_type isp_bandwidth = 1; // [ISP] bandwidth for read/write data to/from ISP buffer (byte/cycle) - 128 MB/s
+			sim_time_type compute_bandwidth_per_unit = 2; // [ISP] bandwidth for computing a 64-bit (16-byte) unit - 256 MB/s
 
 			void StartCMDXfer()
 			{
@@ -81,6 +83,11 @@ namespace NVM
 			void Execute_simulator_event(MQSimEngine::Sim_Event*);
 			typedef void(*ChipReadySignalHandlerType) (Flash_Chip* targetChip, Flash_Command* command);
 			void Connect_to_chip_ready_signal(ChipReadySignalHandlerType);
+
+			sim_time_type Get_isp_command_execution_latency(Flash_Command* command) {
+				sim_time_type latency = 0;
+				
+			}
 			
 			sim_time_type Get_command_execution_latency(command_code_type CMDCode, flash_page_ID_type pageID)
 			{
@@ -94,11 +101,13 @@ namespace NVM
 
 				switch (CMDCode)
 				{
+					case CMD_ISP_BUFFER_READ:
 					case CMD_READ_PAGE:
 					case CMD_READ_PAGE_MULTIPLANE:
 					case CMD_READ_PAGE_COPYBACK:
 					case CMD_READ_PAGE_COPYBACK_MULTIPLANE:
 						return _readLatency[latencyType] + _RBSignalDelayRead;
+					case CMD_ISP_BUFFER_WRITE:
 					case CMD_PROGRAM_PAGE:
 					case CMD_PROGRAM_PAGE_MULTIPLANE:
 					case CMD_PROGRAM_PAGE_COPYBACK:

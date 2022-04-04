@@ -111,7 +111,19 @@ namespace NVM
 				PRINT_ERROR("Flash chip " << ID() << ": executing a flash operation on a busy die!")
 			}
 
-			targetDie->Expected_finish_time = Simulator->Time() + Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
+			if (command->CommandCode == CMD_ISP_BUFFER_READ || command->CommandCode == CMD_ISP_BUFFER_WRITE) {
+				sim_time_type isp_latency = Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
+				isp_latency *= command->Address.size();
+				targetDie->Expected_finish_time = Simulator->Time() + isp_latency;
+
+				// [ISP DEBUG]
+				//std::cout << "[start_command_execution] " << command->Address[0].ChannelID << "-" << command->Address[0].ChipID << "-"
+				//	<< command->Address[0].DieID << "-" << command->Address[0].PageID << "-" << command->Address[0].PlaneID << ": "
+				//	<< isp_latency << ", " << targetDie->Expected_finish_time << std::endl;
+			}
+			else {
+				targetDie->Expected_finish_time = Simulator->Time() + Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
+			}
 			targetDie->CommandFinishEvent = Simulator->Register_sim_event(targetDie->Expected_finish_time,
 				this, command, static_cast<int>(Chip_Sim_Event_Type::COMMAND_FINISHED));
 			targetDie->CurrentCMD = command;
@@ -147,6 +159,7 @@ namespace NVM
 
 			switch (command->CommandCode)
 			{
+				case CMD_ISP_BUFFER_READ:
 				case CMD_READ_PAGE:
 				case CMD_READ_PAGE_MULTIPLANE:
 				case CMD_READ_PAGE_COPYBACK:
@@ -158,6 +171,7 @@ namespace NVM
 						targetDie->Planes[command->Address[planeCntr].PlaneID]->Blocks[command->Address[planeCntr].BlockID]->Pages[command->Address[planeCntr].PageID].Read_metadata(command->Meta_data[planeCntr]);
 					}
 					break;
+				case CMD_ISP_BUFFER_WRITE:
 				case CMD_PROGRAM_PAGE:
 				case CMD_PROGRAM_PAGE_MULTIPLANE:
 				case CMD_PROGRAM_PAGE_COPYBACK:

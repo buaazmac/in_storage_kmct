@@ -7,6 +7,8 @@
 
 #define NVDDR2DataInTransferTime(X,Y) ((X / Y->ChannelWidth / 2) * Y->TwoUnitDataInTime)
 #define NVDDR2DataOutTransferTime(X,Y) ((X / Y->ChannelWidth / 2) * Y->TwoUnitDataOutTime)
+#define ISP_BUFFER_READ_TIME 10
+#define ISP_BUFFER_WRITE_TIME 10
 
 
 namespace SSD_Components

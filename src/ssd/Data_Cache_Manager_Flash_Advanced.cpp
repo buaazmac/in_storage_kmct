@@ -84,6 +84,13 @@ namespace SSD_Components
 			default:
 				break;
 		}
+
+		std::cout << "\n--------------- [SSD DRAM STATS] ---------------------\n";
+		std::cout << "Total DRAM Access Size (Bytes): " << total_dram_access_size << std::endl;
+		std::cout << "Total DRAM Access Time (ns): " << total_dram_access_time << std::endl;
+		std::cout << "Total DRAM Idle Time (ns): " << total_dram_idle_time << std::endl;
+		std::cout << "Average Bandwidth (GB/s): " << double(total_dram_access_size) / double(total_dram_access_time) << std::endl;
+		std::cout << "Max Memory Footprint (B): " << max_memory_footprint << std::endl;
 		
 		delete per_stream_cache;
 		delete[] dram_execution_queue;
@@ -106,6 +113,7 @@ namespace SSD_Components
 				//Estimate the queue length based on the arrival rate
 				for (auto &stat : workload_stats) {
 					switch (caching_mode_per_input_stream[stat->Stream_id]) {
+						case Caching_Mode::IN_STORAGE_PROCESSING:
 						case Caching_Mode::TURNED_OFF:
 							break;
 						case Caching_Mode::READ_CACHE:
@@ -141,6 +149,7 @@ namespace SSD_Components
 				for (auto &stat : workload_stats) {
 					switch (caching_mode_per_input_stream[stat->Stream_id])
 					{
+						case Caching_Mode::IN_STORAGE_PROCESSING:
 						case Caching_Mode::TURNED_OFF:
 							break;
 						case Caching_Mode::READ_CACHE:
@@ -187,79 +196,99 @@ namespace SSD_Components
 	void Data_Cache_Manager_Flash_Advanced::process_new_user_request(User_Request* user_request)
 	{
 		//This condition shouldn't happen, but we check it
+		// The transaction_list is generated from Host_Interface_NVMe::segment_user_request
 		if (user_request->Transaction_list.size() == 0) {
 			return;
 		}
 
 		if (user_request->Type == UserRequestType::READ) {
 			switch (caching_mode_per_input_stream[user_request->Stream_id]) {
-				case Caching_Mode::TURNED_OFF:
-					static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(user_request->Transaction_list);
-					return;
-				case Caching_Mode::WRITE_CACHE:
-				case Caching_Mode::READ_CACHE:
-				case Caching_Mode::WRITE_READ_CACHE:
-				{
-					std::list<NVM_Transaction*>::iterator it = user_request->Transaction_list.begin();
-					while (it != user_request->Transaction_list.end()) {
-						NVM_Transaction_Flash_RD* tr = (NVM_Transaction_Flash_RD*)(*it);
-						if (per_stream_cache[tr->Stream_id]->Exists(tr->Stream_id, tr->LPA)) {
-							page_status_type available_sectors_bitmap = per_stream_cache[tr->Stream_id]->Get_slot(tr->Stream_id, tr->LPA).State_bitmap_of_existing_sectors & tr->read_sectors_bitmap;
-							if (available_sectors_bitmap == tr->read_sectors_bitmap) {
-								user_request->Sectors_serviced_from_cache += count_sector_no_from_status_bitmap(tr->read_sectors_bitmap);
-								user_request->Transaction_list.erase(it++);//the ++ operation should happen here, otherwise the iterator will be part of the list after erasing it from the list
-							} else if (available_sectors_bitmap != 0) {
-								user_request->Sectors_serviced_from_cache += count_sector_no_from_status_bitmap(available_sectors_bitmap);
-								tr->read_sectors_bitmap = (tr->read_sectors_bitmap & ~available_sectors_bitmap);
-								tr->Data_and_metadata_size_in_byte -= count_sector_no_from_status_bitmap(available_sectors_bitmap) * SECTOR_SIZE_IN_BYTE;
-								it++;
-							} else {
-								it++;
-							}
-						} else {
+			case Caching_Mode::IN_STORAGE_PROCESSING:
+			case Caching_Mode::TURNED_OFF:
+				static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(user_request->Transaction_list);
+				return;
+			case Caching_Mode::WRITE_CACHE:
+			case Caching_Mode::READ_CACHE:
+			case Caching_Mode::WRITE_READ_CACHE:
+			{
+				std::list<NVM_Transaction*>::iterator it = user_request->Transaction_list.begin();
+				while (it != user_request->Transaction_list.end()) {
+					NVM_Transaction_Flash_RD* tr = (NVM_Transaction_Flash_RD*)(*it);
+					if (per_stream_cache[tr->Stream_id]->Exists(tr->Stream_id, tr->LPA)) {
+						page_status_type available_sectors_bitmap = per_stream_cache[tr->Stream_id]->Get_slot(tr->Stream_id, tr->LPA).State_bitmap_of_existing_sectors & tr->read_sectors_bitmap;
+						if (available_sectors_bitmap == tr->read_sectors_bitmap) {
+							user_request->Sectors_serviced_from_cache += count_sector_no_from_status_bitmap(tr->read_sectors_bitmap);
+							user_request->Transaction_list.erase(it++);//the ++ operation should happen here, otherwise the iterator will be part of the list after erasing it from the list
+						}
+						else if (available_sectors_bitmap != 0) {
+							user_request->Sectors_serviced_from_cache += count_sector_no_from_status_bitmap(available_sectors_bitmap);
+							tr->read_sectors_bitmap = (tr->read_sectors_bitmap & ~available_sectors_bitmap);
+							tr->Data_and_metadata_size_in_byte -= count_sector_no_from_status_bitmap(available_sectors_bitmap) * SECTOR_SIZE_IN_BYTE;
+							it++;
+						}
+						else {
 							it++;
 						}
 					}
-
-					if (user_request->Sectors_serviced_from_cache > 0) {
-						Memory_Transfer_Info* transfer_info = new Memory_Transfer_Info;
-						transfer_info->Size_in_bytes = user_request->Sectors_serviced_from_cache * SECTOR_SIZE_IN_BYTE;
-						transfer_info->Related_request = user_request;
-						transfer_info->next_event_type = Data_Cache_Simulation_Event_Type::MEMORY_READ_FOR_USERIO_FINISHED;
-						transfer_info->Stream_id = user_request->Stream_id;
-						service_dram_access_request(transfer_info);
+					else {
+						it++;
 					}
-					if (user_request->Transaction_list.size() > 0) {
-						static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(user_request->Transaction_list);
-					}
-
-					return;
 				}
+
+				if (user_request->Sectors_serviced_from_cache > 0) {
+					Memory_Transfer_Info* transfer_info = new Memory_Transfer_Info;
+					transfer_info->Size_in_bytes = user_request->Sectors_serviced_from_cache * SECTOR_SIZE_IN_BYTE;
+					transfer_info->Related_request = user_request;
+					transfer_info->next_event_type = Data_Cache_Simulation_Event_Type::MEMORY_READ_FOR_USERIO_FINISHED;
+					transfer_info->Stream_id = user_request->Stream_id;
+					service_dram_access_request(transfer_info);
+				}
+				if (user_request->Transaction_list.size() > 0) {
+					static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(user_request->Transaction_list);
+				}
+
+				return;
+			}
 			}
 		}
-		else//This is a write request
+		else if (user_request->Type == UserRequestType::WRITE) //This is a write request
 		{
 			switch (caching_mode_per_input_stream[user_request->Stream_id])
 			{
-				case Caching_Mode::TURNED_OFF:
-				case Caching_Mode::READ_CACHE:
-					static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(user_request->Transaction_list);
-					return;
-				case Caching_Mode::WRITE_CACHE://The data cache manger unit performs like a destage buffer
-				case Caching_Mode::WRITE_READ_CACHE:
-				{
-					write_to_destage_buffer(user_request);
-
-					int queue_id = user_request->Stream_id;
-					if (shared_dram_request_queue) {
-						queue_id = 0;
-					}
-					if (user_request->Transaction_list.size() > 0) {
-						waiting_user_requests_queue_for_dram_free_slot[queue_id].push_back(user_request);
-					}
-					return;
-				}
+			case Caching_Mode::IN_STORAGE_PROCESSING:
+			{
+				Memory_Transfer_Info* transfer_info = new Memory_Transfer_Info;
+				transfer_info->Size_in_bytes = user_request->Size_in_byte;
+				transfer_info->Related_request = user_request;
+				transfer_info->next_event_type = Data_Cache_Simulation_Event_Type::MEMORY_READ_FOR_ISP_WRITE;
+				transfer_info->Stream_id = user_request->Stream_id;
+				((Data_Cache_Manager_Flash_Advanced*)_my_instance)->service_dram_access_request(transfer_info);
+				return;
 			}
+			case Caching_Mode::TURNED_OFF:
+			case Caching_Mode::READ_CACHE:
+				static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(user_request->Transaction_list);
+				return;
+			case Caching_Mode::WRITE_CACHE://The data cache manger unit performs like a destage buffer
+			case Caching_Mode::WRITE_READ_CACHE:
+			{
+				write_to_destage_buffer(user_request);
+
+				int queue_id = user_request->Stream_id;
+				if (shared_dram_request_queue) {
+					queue_id = 0;
+				}
+				if (user_request->Transaction_list.size() > 0) {
+					waiting_user_requests_queue_for_dram_free_slot[queue_id].push_back(user_request);
+				}
+				return;
+			}
+			}
+		}
+		else // This is the place to handle ISP request
+		{
+			// [ISP] we directly dispatch to the physical address
+			static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(user_request->Transaction_list);
 		}
 	}
 
@@ -365,7 +394,13 @@ namespace SSD_Components
 
 		/* This is an update read (a read that is generated for a write request that partially updates page data).
 		*  An update read transaction is issued in Address Mapping Unit, but is consumed in data cache manager.*/
-		if (transaction->Type == Transaction_Type::READ) {
+		// [ISP]
+		if (transaction->Type == Transaction_Type::ISP) {
+			transaction->UserIORequest->Transaction_list.remove(transaction);
+			if (_my_instance->is_user_request_finished(transaction->UserIORequest)) {
+				_my_instance->broadcast_user_request_serviced_signal(transaction->UserIORequest);
+			}
+		} else if (transaction->Type == Transaction_Type::READ) {
 			if (((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite != NULL) {
 				((NVM_Transaction_Flash_RD*)transaction)->RelatedWrite->RelatedRead = NULL;
 				return;
@@ -373,6 +408,20 @@ namespace SSD_Components
 
 			switch (Data_Cache_Manager_Flash_Advanced::caching_mode_per_input_stream[transaction->Stream_id])
 			{
+				case Caching_Mode::IN_STORAGE_PROCESSING:
+					transaction->UserIORequest->Transaction_list.remove(transaction);
+
+					if (_my_instance->is_user_request_finished(transaction->UserIORequest)) {
+						Memory_Transfer_Info* transfer_info = new Memory_Transfer_Info;
+						transfer_info->Size_in_bytes = transaction->UserIORequest->Size_in_byte;
+						transfer_info->Related_request = transaction->UserIORequest;
+						transfer_info->next_event_type = Data_Cache_Simulation_Event_Type::MEMORY_WRITE_FOR_ISP_READ;
+						transfer_info->Stream_id = transaction->Stream_id;
+						((Data_Cache_Manager_Flash_Advanced*)_my_instance)->service_dram_access_request(transfer_info);
+						//transaction->UserIORequest->ProcessLevel = 1;
+						//_my_instance->broadcast_user_request_serviced_signal(transaction->UserIORequest);
+					}
+					break;
 				case Caching_Mode::TURNED_OFF:
 				case Caching_Mode::WRITE_CACHE:
 					transaction->UserIORequest->Transaction_list.remove(transaction);
@@ -438,6 +487,18 @@ namespace SSD_Components
 		} else {//This is a write request
 			switch (Data_Cache_Manager_Flash_Advanced::caching_mode_per_input_stream[transaction->Stream_id])
 			{
+				case Caching_Mode::IN_STORAGE_PROCESSING:
+					transaction->UserIORequest->Transaction_list.remove(transaction);
+					if (_my_instance->is_user_request_finished(transaction->UserIORequest)) {
+						_my_instance->broadcast_user_request_serviced_signal(transaction->UserIORequest);
+						//Memory_Transfer_Info* transfer_info = new Memory_Transfer_Info;
+						//transfer_info->Size_in_bytes = transaction->UserIORequest->Size_in_byte;
+						//transfer_info->Related_request = transaction->UserIORequest;
+						//transfer_info->next_event_type = Data_Cache_Simulation_Event_Type::MEMORY_READ_FOR_ISP_WRITE;
+						//transfer_info->Stream_id = transaction->Stream_id;
+						//((Data_Cache_Manager_Flash_Advanced*)_my_instance)->service_dram_access_request(transfer_info);
+					}
+					break;
 				case Caching_Mode::TURNED_OFF:
 				case Caching_Mode::READ_CACHE:
 					transaction->UserIORequest->Transaction_list.remove(transaction);
@@ -523,11 +584,30 @@ namespace SSD_Components
 				dram_execution_queue[request_info->Stream_id].push(request_info);
 			}
 		} else {
+			// [ISP DEBUG]
+			std::cout << "[service_dram_access_request] size - " << request_info->Size_in_bytes 
+					  << ", access_time: " 
+					  << estimate_dram_access_time(request_info->Size_in_bytes, dram_row_size,
+												   dram_busrt_size, dram_burst_transfer_time_ddr, 
+												   dram_tRCD, dram_tCL, dram_tRP) 
+					  << std::endl;
+
 			Simulator->Register_sim_event(Simulator->Time() + estimate_dram_access_time(request_info->Size_in_bytes, dram_row_size,
 				dram_busrt_size, dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP),
 				this, request_info, static_cast<int>(request_info->next_event_type));
 			memory_channel_is_busy = true;
+			n_memory_channels_used++;
 			dram_execution_list_turn = request_info->Stream_id;
+
+			if (!first_dram_access) {
+				total_dram_idle_time += Simulator->Time() - last_dram_access_time;
+			}
+			last_dram_access_time = Simulator->Time() + estimate_dram_access_time(request_info->Size_in_bytes, dram_row_size,
+				dram_busrt_size, dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP),
+				this, request_info, static_cast<int>(request_info->next_event_type);
+			total_dram_access_size += request_info->Size_in_bytes;
+			total_dram_access_time += estimate_dram_access_time(request_info->Size_in_bytes, dram_row_size,
+				dram_busrt_size, dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 		}
 	}
 
@@ -538,6 +618,17 @@ namespace SSD_Components
 
 		switch (eventType)
 		{
+			case Data_Cache_Simulation_Event_Type::MEMORY_WRITE_FOR_ISP_READ:
+				((User_Request*)(transfer_info)->Related_request)->ProcessLevel = 1;
+				_my_instance->broadcast_user_request_serviced_signal(((User_Request*)(transfer_info)->Related_request));
+				memory_footprint += transfer_info->Size_in_bytes;
+				if (memory_footprint > max_memory_footprint) max_memory_footprint = memory_footprint;
+				break;
+			case Data_Cache_Simulation_Event_Type::MEMORY_READ_FOR_ISP_WRITE:
+				static_cast<FTL*>(nvm_firmware)->Address_Mapping_Unit->Translate_lpa_to_ppa_and_dispatch(((User_Request*)(transfer_info)->Related_request)->Transaction_list);
+				memory_footprint -= transfer_info->Size_in_bytes; // In simulation, memory_footprint should not be less than 0
+				if (memory_footprint < 0) std::cout << "Error: the memory footprint should not be less than 0!" << std::endl;
+				break;
 			case Data_Cache_Simulation_Event_Type::MEMORY_READ_FOR_USERIO_FINISHED://A user read is service from DRAM cache
 			case Data_Cache_Simulation_Event_Type::MEMORY_WRITE_FOR_USERIO_FINISHED:
 				((User_Request*)(transfer_info)->Related_request)->Sectors_serviced_from_cache -= transfer_info->Size_in_bytes / SECTOR_SIZE_IN_BYTE;
@@ -554,6 +645,7 @@ namespace SSD_Components
 		delete transfer_info;
 
 		memory_channel_is_busy = false;
+		n_memory_channels_used--;
 		if (shared_dram_request_queue)	{
 			if (dram_execution_queue[0].size() > 0)	{
 				Memory_Transfer_Info* transfer_info = dram_execution_queue[0].front();
@@ -562,6 +654,14 @@ namespace SSD_Components
 					dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP),
 					this, transfer_info, static_cast<int>(transfer_info->next_event_type));
 				memory_channel_is_busy = true;
+				n_memory_channels_used++;
+
+				total_dram_idle_time += Simulator->Time() - last_dram_access_time;
+				last_dram_access_time = Simulator->Time() + estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
+					dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
+				total_dram_access_size += transfer_info->Size_in_bytes;
+				total_dram_access_time += estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
+					dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 			}
 		} else {
 			for (unsigned int i = 0; i < stream_count; i++) {
@@ -574,6 +674,14 @@ namespace SSD_Components
 						dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP),
 						this, transfer_info, static_cast<int>(transfer_info->next_event_type));
 					memory_channel_is_busy = true;
+					n_memory_channels_used++;
+
+					total_dram_idle_time += Simulator->Time() - last_dram_access_time;
+					last_dram_access_time = Simulator->Time() + estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
+						dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
+					total_dram_access_size += transfer_info->Size_in_bytes;
+					total_dram_access_time += estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
+						dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 					break;
 				}
 			}

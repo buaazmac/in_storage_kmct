@@ -81,11 +81,35 @@ inline void Input_Stream_Manager_NVMe::Handle_new_arrived_request(User_Request *
 
 		((Host_Interface_NVMe *)host_interface)->broadcast_user_request_arrival_signal(request);
 	}
-	else
+	else if (request->Type == UserRequestType::WRITE)
 	{ //This is a write request
 		((Input_Stream_NVMe *)input_streams[request->Stream_id])->Waiting_user_requests.push_back(request);
 		((Input_Stream_NVMe *)input_streams[request->Stream_id])->STAT_number_of_write_requests++;
 		((Host_Interface_NVMe *)host_interface)->request_fetch_unit->Fetch_write_data(request);
+	}
+	else if (request->Type == UserRequestType::BREAD || request->Type == UserRequestType::BWRITE)
+	{ // A buffer read ISP command
+		((Input_Stream_NVMe*)input_streams[request->Stream_id])->Waiting_user_requests.push_back(request);
+		((Input_Stream_NVMe*)input_streams[request->Stream_id])->STAT_number_of_buffer_requests++;
+		segment_user_request(request);
+
+		((Host_Interface_NVMe*)host_interface)->broadcast_user_request_arrival_signal(request);
+	}
+	else if (request->Type == UserRequestType::COMPUTE) 
+	{ // A compute ISP command
+		((Input_Stream_NVMe*)input_streams[request->Stream_id])->Waiting_user_requests.push_back(request);
+		((Input_Stream_NVMe*)input_streams[request->Stream_id])->STAT_number_of_compute_requests++;
+		segment_user_request(request);
+
+		((Host_Interface_NVMe*)host_interface)->broadcast_user_request_arrival_signal(request);
+	}
+	else if (request->Type == UserRequestType::UPPERTX || request->Type == UserRequestType::LOWERTX)
+	{ // A transfer command to an upper buffer
+		((Input_Stream_NVMe*)input_streams[request->Stream_id])->Waiting_user_requests.push_back(request);
+		((Input_Stream_NVMe*)input_streams[request->Stream_id])->STAT_number_of_transfer_requests++;
+		segment_user_request(request);
+
+		((Host_Interface_NVMe*)host_interface)->broadcast_user_request_arrival_signal(request);
 	}
 }
 
@@ -104,7 +128,8 @@ inline void Input_Stream_Manager_NVMe::Handle_serviced_request(User_Request *req
 	DEBUG("** Host Interface: Request #" << request->ID << " from stream #" << request->Stream_id << " is finished")
 
 	//If this is a read request, then the read data should be written to host memory
-	if (request->Type == UserRequestType::READ)
+	// [ISP] If the ProcessLevel has been changed to 1,  this read is served in the device DRAM, no need to send the data to host
+	if (request->Type == UserRequestType::READ && request->ProcessLevel == 0)
 	{
 		((Host_Interface_NVMe *)host_interface)->request_fetch_unit->Send_read_data(request);
 	}
@@ -202,12 +227,32 @@ void Input_Stream_Manager_NVMe::segment_user_request(User_Request *user_request)
 			user_request->Transaction_list.push_back(transaction);
 			input_streams[user_request->Stream_id]->STAT_number_of_read_transactions++;
 		}
-		else
+		else if (user_request->Type == UserRequestType::WRITE)
 		{ //user_request->Type == UserRequestType::WRITE
 			NVM_Transaction_Flash_WR *transaction = new NVM_Transaction_Flash_WR(Transaction_Source_Type::USERIO, user_request->Stream_id,
 																				 transaction_size * SECTOR_SIZE_IN_BYTE, lpa, user_request, user_request->Priority_class, 0, access_status_bitmap, CurrentTimeStamp);
 			user_request->Transaction_list.push_back(transaction);
 			input_streams[user_request->Stream_id]->STAT_number_of_write_transactions++;
+		}
+		else 
+		{ // [ISP] This is an ISP transaction: BREAD, BWRITE, COMPUTE, UPPERTX, LOWERTX
+			// [ISP] The request can be accessed by transaction->UserIORequest, to get the opcode of the request
+			NVM_Transaction_Flash_ISP* transaction = new NVM_Transaction_Flash_ISP(Transaction_Source_Type::USERIO, user_request->Stream_id,
+																				   transaction_size * SECTOR_SIZE_IN_BYTE, lpa, NO_PPA, user_request, user_request->Priority_class, 0, access_status_bitmap, CurrentTimeStamp);
+			user_request->Transaction_list.push_back(transaction);
+			// TODO: input_streams[user_request->Stream_id]->STAT_number_of_isp_requests++;
+			if (user_request->Type == UserRequestType::BREAD || user_request->Type == UserRequestType::BWRITE) 
+			{
+				input_streams[user_request->Stream_id]->STAT_number_of_buffer_transactions++;
+			}
+			else if (user_request->Type == UserRequestType::COMPUTE)
+			{
+				input_streams[user_request->Stream_id]->STAT_number_of_compute_transactions++;
+			}
+			else if (user_request->Type == UserRequestType::LOWERTX || user_request->Type == UserRequestType::UPPERTX)
+			{
+				input_streams[user_request->Stream_id]->STAT_number_of_transfer_transactions++;
+			}
 		}
 
 		lsa = lsa + transaction_size;
@@ -305,6 +350,41 @@ void Request_Fetch_Unit_NVMe::Process_pcie_read_message(uint64_t address, void *
 			new_request->Start_LBA = ((LHA_type)sqe->Command_specific[1]) << 31 | (LHA_type)sqe->Command_specific[0]; //Command Dword 10 and Command Dword 11
 			new_request->SizeInSectors = sqe->Command_specific[2] & (LHA_type)(0x0000ffff);
 			new_request->Size_in_byte = new_request->SizeInSectors * SECTOR_SIZE_IN_BYTE;
+			break;
+		case NVME_BREAD_OPCODE:
+			new_request->Type = UserRequestType::BREAD;
+			new_request->Start_LBA = ((LHA_type)sqe->Command_specific[1]) << 31 | (LHA_type)sqe->Command_specific[0]; //Command Dword 10 and Command Dword 11
+			new_request->SizeInSectors = sqe->Command_specific[2]; // Here we don't limit the size within 16-bit
+			new_request->Size_in_byte = new_request->SizeInSectors * SECTOR_SIZE_IN_BYTE;
+			new_request->ProcessLevel = sqe->Command_specific[3];
+			break;
+		case NVME_BWRITE_OPCODE:
+			new_request->Type = UserRequestType::BWRITE;
+			new_request->Start_LBA = ((LHA_type)sqe->Command_specific[1]) << 31 | (LHA_type)sqe->Command_specific[0]; //Command Dword 10 and Command Dword 11
+			new_request->SizeInSectors = sqe->Command_specific[2];
+			new_request->Size_in_byte = new_request->SizeInSectors * SECTOR_SIZE_IN_BYTE;
+			new_request->ProcessLevel = sqe->Command_specific[3];
+			break;
+		case NVME_COMPUTE_OPCODE:
+			new_request->Type = UserRequestType::COMPUTE;
+			new_request->Start_LBA = ((LHA_type)sqe->Command_specific[1]) << 31 | (LHA_type)sqe->Command_specific[0]; //Command Dword 10 and Command Dword 11
+			new_request->SizeInSectors = sqe->Command_specific[2];
+			new_request->Size_in_byte = new_request->SizeInSectors * SECTOR_SIZE_IN_BYTE;
+			new_request->ProcessLevel = sqe->Command_specific[3];
+			break;
+		case NVME_LOWERTX_OPCODE:
+			new_request->Type = UserRequestType::LOWERTX;
+			new_request->Start_LBA = ((LHA_type)sqe->Command_specific[1]) << 31 | (LHA_type)sqe->Command_specific[0]; //Command Dword 10 and Command Dword 11
+			new_request->SizeInSectors = sqe->Command_specific[2];
+			new_request->Size_in_byte = new_request->SizeInSectors * SECTOR_SIZE_IN_BYTE;
+			new_request->ProcessLevel = sqe->Command_specific[3];
+			break;
+		case NVME_UPPERTX_OPCODE:
+			new_request->Type = UserRequestType::UPPERTX;
+			new_request->Start_LBA = ((LHA_type)sqe->Command_specific[1]) << 31 | (LHA_type)sqe->Command_specific[0]; //Command Dword 10 and Command Dword 11
+			new_request->SizeInSectors = sqe->Command_specific[2];
+			new_request->Size_in_byte = new_request->SizeInSectors * SECTOR_SIZE_IN_BYTE;
+			new_request->ProcessLevel = sqe->Command_specific[3];
 			break;
 		default:
 			throw std::invalid_argument("NVMe command is not supported!");

@@ -5,7 +5,7 @@
 
 namespace Host_Components
 {
-	enum class Host_IO_Request_Type { READ, WRITE };
+	enum class Host_IO_Request_Type { READ, WRITE, BREAD, BWRITE, COMPUTE, UPPER_TX, LOWER_TX };
 	class Host_IO_Request
 	{
 	public:
@@ -16,6 +16,7 @@ namespace Host_Components
 		Host_IO_Request_Type Type;
 		uint16_t IO_queue_info;
 		uint16_t Source_flow_id;//Only used in SATA host interface
+		unsigned int ISP_Level; //The level of ISP command (0: channel, 1: chip, or 2: die)
 	};
 }
 

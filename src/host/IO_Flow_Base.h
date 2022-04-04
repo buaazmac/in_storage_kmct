@@ -94,6 +94,7 @@ namespace Host_Components
 
 		//Variables used to collect statistics
 		unsigned int STAT_generated_request_count, STAT_generated_read_request_count, STAT_generated_write_request_count;
+		unsigned int STAT_generated_bread_request_count, STAT_generated_bwrite_request_count, STAT_generated_compute_request_count, STAT_generated_uppertx_request_count, STAT_generated_lowertx_request_count;
 		unsigned int STAT_ignored_request_count;
 		unsigned int STAT_serviced_request_count, STAT_serviced_read_request_count, STAT_serviced_write_request_count;
 		sim_time_type STAT_sum_device_response_time, STAT_sum_device_response_time_read, STAT_sum_device_response_time_write;

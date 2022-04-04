@@ -85,6 +85,7 @@ protected:
 	virtual bool service_read_transaction(NVM::FlashMemory::Flash_Chip *chip) = 0;
 	virtual bool service_write_transaction(NVM::FlashMemory::Flash_Chip *chip) = 0;
 	virtual bool service_erase_transaction(NVM::FlashMemory::Flash_Chip *chip) = 0;
+	virtual bool service_isp_chip_transaction(NVM::FlashMemory::Flash_Chip* chip) { return true; }
 	bool issue_command_to_chip(Flash_Transaction_Queue *sourceQueue1, Flash_Transaction_Queue *sourceQueue2, Transaction_Type transactionType, bool suspensionRequired);
 	static void handle_transaction_serviced_signal_from_PHY(NVM_Transaction_Flash *transaction);
 	static void handle_channel_idle_signal(flash_channel_ID_type);
@@ -94,7 +95,9 @@ protected:
 	{
 		if (!_my_instance->service_read_transaction(chip)) {
 			if (!_my_instance->service_write_transaction(chip)) {
-				_my_instance->service_erase_transaction(chip);
+				if (!_my_instance->service_erase_transaction(chip)) {
+					_my_instance->service_isp_chip_transaction(chip);
+				}
 			}
 		}
 	}
@@ -110,6 +113,8 @@ private:
 			return static_cast<NVM_Transaction_Flash_WR*>(transaction)->RelatedRead == NULL;
 		case Transaction_Type::ERASE:
 			return static_cast<NVM_Transaction_Flash_ER*>(transaction)->Page_movement_activities.size() == 0;
+		case Transaction_Type::ISP:
+			return true;
 		default:
 			return true;
 		}

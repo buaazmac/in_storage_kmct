@@ -53,8 +53,19 @@ private:
     Flash_Transaction_Queue **MappingWriteTRQueue;
     IO_Flow_Priority_Class::Priority **nextPriorityClassRead;
     IO_Flow_Priority_Class::Priority **nextPriorityClassWrite;
+
+    // [ISP]
+    Flash_Transaction_Queue*** UserIspTRQueueDie;
+    Flash_Transaction_Queue** UserIspTRQueueChip;
+    Flash_Transaction_Queue* UserIspTRQueueChannel;
+    Flash_Transaction_Queue UserIspTRQueueSSD;
+
     int **currentWeightRead;
     int **currentWeightWrite;
+
+    bool service_isp_ssd_transaction();
+    bool service_isp_channel_transaction(flash_channel_ID_type channelID);
+    bool service_isp_chip_transaction(NVM::FlashMemory::Flash_Chip* chip);
 
     bool service_read_transaction(NVM::FlashMemory::Flash_Chip *chip);
     bool service_write_transaction(NVM::FlashMemory::Flash_Chip *chip);
