@@ -68,7 +68,7 @@ namespace SSD_Components
 		const sim_time_type tRCD, const sim_time_type tCL, const sim_time_type tRP)
 	{
 		// [ISP DEBUG]
-		//if (memory_access_size_in_byte > 0) return 2;
+		if (memory_access_size_in_byte > 0) return 2;
 		if (memory_access_size_in_byte <= dram_row_size) {
 			return (sim_time_type)(tRCD + tCL + sim_time_type((double)(memory_access_size_in_byte / dram_burst_size_in_bytes / 2) * dram_burst_transfer_time_ddr));
 		}

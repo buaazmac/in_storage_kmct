@@ -18,6 +18,9 @@ namespace SSD_Components
 
 	enum class CMTEntryStatus {FREE, WAITING, VALID};
 
+	// [ISP]
+	static bool in_storage_processing_amu = true;
+
 	struct GTDEntryType //Entry type for the Global Translation Directory
 	{
 		MPPN_type MPPN;

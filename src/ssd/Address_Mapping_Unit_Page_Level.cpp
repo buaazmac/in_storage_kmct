@@ -268,7 +268,13 @@ namespace SSD_Components
 	inline PPA_type AddressMappingDomain::Get_ppa(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa)
 	{
 		if (ideal_mapping) {
-			return GlobalMappingTable[lpa].PPA;
+			// [ISP] we make a trick here to skip the address mapping
+			if (!in_storage_processing_amu) {
+				return GlobalMappingTable[lpa].PPA;
+			}
+			else {
+				return lpa;
+			}
 		} else {
 			return CMT->Retrieve_ppa(stream_id, lpa);
 		}
@@ -598,10 +604,14 @@ namespace SSD_Components
 	bool Address_Mapping_Unit_Page_Level::translate_lpa_to_ppa(stream_id_type streamID, NVM_Transaction_Flash* transaction)
 	{
 		PPA_type ppa;
-		if (transaction->Type == Transaction_Type::READ || transaction->Type == Transaction_Type::WRITE)
+		if (transaction->Type == Transaction_Type::READ || transaction->Type == Transaction_Type::WRITE) {
 			ppa = domains[streamID]->Get_ppa(ideal_mapping_table, streamID, transaction->LPA);
-		else
+			// [ISP DEBUG]
+			//std::cout << "LPA: " << transaction->LPA << ", PPA: " << ppa << std::endl;
+		}
+		else {
 			ppa = transaction->LPA;
+		}
 
 		if (transaction->Type == Transaction_Type::READ) {
 			if (ppa == NO_PPA) {
@@ -609,17 +619,22 @@ namespace SSD_Components
 			}
 			transaction->PPA = ppa;
 			Convert_ppa_to_address(transaction->PPA, transaction->Address);
-			block_manager->Read_transaction_issued(transaction->Address);
+			// [ISP] unused comment
+			if (!in_storage_processing_amu) {
+				block_manager->Read_transaction_issued(transaction->Address);
+			}
 			transaction->Physical_address_determined = true;
 			
 			return true;
 		} else if (transaction->Type == Transaction_Type::WRITE) {//This is a write transaction
 			allocate_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction);
 			//there are too few free pages remaining only for GC
-			if (ftl->GC_and_WL_Unit->Stop_servicing_writes(transaction->Address)){
-				return false;
+			if (!in_storage_processing_amu) {
+				if (ftl->GC_and_WL_Unit->Stop_servicing_writes(transaction->Address)) {
+					return false;
+				}
+				allocate_page_in_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction, false);
 			}
-			allocate_page_in_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction, false);
 			transaction->Physical_address_determined = true;
 			
 			return true;

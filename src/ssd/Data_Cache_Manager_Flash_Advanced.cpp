@@ -91,6 +91,8 @@ namespace SSD_Components
 		std::cout << "Total DRAM Idle Time (ns): " << total_dram_idle_time << std::endl;
 		std::cout << "Average Bandwidth (GB/s): " << double(total_dram_access_size) / double(total_dram_access_time) << std::endl;
 		std::cout << "Max Memory Footprint (B): " << max_memory_footprint << std::endl;
+		std::cout << "Current Simulation Time (ns): " << Simulator->Time() << std::endl;
+		std::cout << "First Transaction Issue Time (ns): " << first_tr_issue_time << std::endl;
 		
 		delete per_stream_cache;
 		delete[] dram_execution_queue;
@@ -383,6 +385,13 @@ namespace SSD_Components
 
 	void Data_Cache_Manager_Flash_Advanced::handle_transaction_serviced_signal_from_PHY(NVM_Transaction_Flash* transaction)
 	{
+		// [ISP] record the issue time of the first transaction
+		if (!((Data_Cache_Manager_Flash_Advanced*)_my_instance)->first_tr_serviced) {
+			((Data_Cache_Manager_Flash_Advanced*)_my_instance)->first_tr_issue_time = transaction->Issue_time;
+			((Data_Cache_Manager_Flash_Advanced*)_my_instance)->first_tr_serviced = true;
+			// [ISP]
+			std::cout << "[first serviced transaction] serviced time = " << transaction->Issue_time << std::endl;
+		}
 		//First check if the transaction source is a user request or the cache itself
 		if (transaction->Source != Transaction_Source_Type::USERIO && transaction->Source != Transaction_Source_Type::CACHE) {
 			return;
@@ -585,12 +594,14 @@ namespace SSD_Components
 			}
 		} else {
 			// [ISP DEBUG]
+			/*
 			std::cout << "[service_dram_access_request] size - " << request_info->Size_in_bytes 
 					  << ", access_time: " 
 					  << estimate_dram_access_time(request_info->Size_in_bytes, dram_row_size,
 												   dram_busrt_size, dram_burst_transfer_time_ddr, 
 												   dram_tRCD, dram_tCL, dram_tRP) 
 					  << std::endl;
+			*/
 
 			Simulator->Register_sim_event(Simulator->Time() + estimate_dram_access_time(request_info->Size_in_bytes, dram_row_size,
 				dram_busrt_size, dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP),
@@ -606,6 +617,8 @@ namespace SSD_Components
 				dram_busrt_size, dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP),
 				this, request_info, static_cast<int>(request_info->next_event_type);
 			total_dram_access_size += request_info->Size_in_bytes;
+			// [DEBUG]
+			//std::cout << "1, " << total_dram_access_size << std::endl;
 			total_dram_access_time += estimate_dram_access_time(request_info->Size_in_bytes, dram_row_size,
 				dram_busrt_size, dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 		}
@@ -660,6 +673,8 @@ namespace SSD_Components
 				last_dram_access_time = Simulator->Time() + estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
 					dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 				total_dram_access_size += transfer_info->Size_in_bytes;
+				// [DEBUG]
+				//std::cout << "2, " << total_dram_access_size << std::endl;
 				total_dram_access_time += estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
 					dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 			}
@@ -680,6 +695,8 @@ namespace SSD_Components
 					last_dram_access_time = Simulator->Time() + estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
 						dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 					total_dram_access_size += transfer_info->Size_in_bytes;
+					// [DEBUG]
+					//std::cout << "3, " << total_dram_access_size << std::endl;
 					total_dram_access_time += estimate_dram_access_time(transfer_info->Size_in_bytes, dram_row_size, dram_busrt_size,
 						dram_burst_transfer_time_ddr, dram_tRCD, dram_tCL, dram_tRP);
 					break;

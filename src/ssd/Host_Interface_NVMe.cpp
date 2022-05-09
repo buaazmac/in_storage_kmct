@@ -201,6 +201,7 @@ void Input_Stream_Manager_NVMe::segment_user_request(User_Request *user_request)
 	page_status_type access_status_bitmap = 0;
 	unsigned int handled_sectors_count = 0;
 	unsigned int transaction_size = 0;
+
 	while (handled_sectors_count < req_size)
 	{
 		//Check if LSA is in the correct range allocted to the stream

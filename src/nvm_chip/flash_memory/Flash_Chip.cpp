@@ -115,15 +115,16 @@ namespace NVM
 				sim_time_type isp_latency = Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
 				isp_latency *= command->Address.size();
 				targetDie->Expected_finish_time = Simulator->Time() + isp_latency;
-
-				// [ISP DEBUG]
-				//std::cout << "[start_command_execution] " << command->Address[0].ChannelID << "-" << command->Address[0].ChipID << "-"
-				//	<< command->Address[0].DieID << "-" << command->Address[0].PageID << "-" << command->Address[0].PlaneID << ": "
-				//	<< isp_latency << ", " << targetDie->Expected_finish_time << std::endl;
 			}
 			else {
 				targetDie->Expected_finish_time = Simulator->Time() + Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
 			}
+			DEBUG_ISP("[start_command_execution] " << command->Address[0].ChannelID 
+						<< "-" << command->Address[0].ChipID << "-" << command->Address[0].DieID 
+						<< "-" << command->Address[0].PageID << "-" << command->Address[0].PlaneID 
+						<< ": " << Simulator->Time() << ", " << targetDie->Expected_finish_time << ", " 
+						<< targetDie->Expected_finish_time - Simulator->Time())
+
 			targetDie->CommandFinishEvent = Simulator->Register_sim_event(targetDie->Expected_finish_time,
 				this, command, static_cast<int>(Chip_Sim_Event_Type::COMMAND_FINISHED));
 			targetDie->CurrentCMD = command;
@@ -164,6 +165,7 @@ namespace NVM
 				case CMD_READ_PAGE_MULTIPLANE:
 				case CMD_READ_PAGE_COPYBACK:
 				case CMD_READ_PAGE_COPYBACK_MULTIPLANE:
+					DEBUG_ISP("Channel " << this->ChannelID << " Chip " << this->ChipID << "- Finished executing read command - " << Simulator->Time())
 					DEBUG("Channel " << this->ChannelID << " Chip " << this->ChipID << "- Finished executing read command")
 					for (unsigned int planeCntr = 0; planeCntr < command->Address.size(); planeCntr++) {
 						STAT_readCount++;
@@ -176,6 +178,7 @@ namespace NVM
 				case CMD_PROGRAM_PAGE_MULTIPLANE:
 				case CMD_PROGRAM_PAGE_COPYBACK:
 				case CMD_PROGRAM_PAGE_COPYBACK_MULTIPLANE:
+					DEBUG_ISP("Channel " << this->ChannelID << " Chip " << this->ChipID << "- Finished executing write command - " << Simulator->Time())
 					DEBUG("Channel " << this->ChannelID << " Chip " << this->ChipID << "- Finished executing program command")
 					for (unsigned int planeCntr = 0; planeCntr < command->Address.size(); planeCntr++) {
 						STAT_progamCount++;

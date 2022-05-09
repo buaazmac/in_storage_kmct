@@ -197,6 +197,15 @@ namespace SSD_Components {
 						chipBKE->Last_transfer_finish_time = Simulator->Time() + suspendTime + target_channel->ReadCommandTime[transaction_list.size()];
 						Simulator->Register_sim_event(Simulator->Time() + suspendTime + target_channel->ReadCommandTime[transaction_list.size()], this,
 							dieBKE, (int)NVDDR2_SimEventType::BREAD_CMD_ADDR_TRANSFERRED);
+
+						// [ISP DEBUG]
+						/*
+							DEBUG_ISP("[send_command_isp_read]" << transaction_list.front()->Address.ChannelID << "-"
+								<< transaction_list.front()->Address.ChipID << "-" << transaction_list.front()->Address.DieID
+								<< "-" << transaction_list.front()->Address.PageID << "-" << transaction_list.front()->Address.PlaneID
+								<< ": " << Simulator->Time() << ", " << chipBKE->Last_transfer_finish_time
+								<< ", " << chipBKE->Last_transfer_finish_time - Simulator->Time())
+						*/
 					}
 					else {
 						dieBKE->DieInterleavedTime = suspendTime + target_channel->ReadCommandTime[transaction_list.size()];
@@ -270,6 +279,13 @@ namespace SSD_Components {
 					chipBKE->Last_transfer_finish_time = Simulator->Time() + suspendTime + target_channel->ReadCommandTime[transaction_list.size()];
 					Simulator->Register_sim_event(Simulator->Time() + suspendTime + target_channel->ReadCommandTime[transaction_list.size()], this,
 						dieBKE, (int)NVDDR2_SimEventType::READ_CMD_ADDR_TRANSFERRED);
+					/*
+					DEBUG_ISP("[send_command_read]" << transaction_list.front()->Address.ChannelID << "-" 
+								<< transaction_list.front()->Address.ChipID << "-" << transaction_list.front()->Address.DieID 
+								<< "-" << transaction_list.front()->Address.PageID << "-" << transaction_list.front()->Address.PlaneID 
+								<< ": " << Simulator->Time() << ", " << chipBKE->Last_transfer_finish_time
+								<< ", " << chipBKE->Last_transfer_finish_time - Simulator->Time())
+					*/
 				} else {
 					dieBKE->DieInterleavedTime = suspendTime + target_channel->ReadCommandTime[transaction_list.size()];
 					chipBKE->Last_transfer_finish_time += suspendTime + target_channel->ReadCommandTime[transaction_list.size()];

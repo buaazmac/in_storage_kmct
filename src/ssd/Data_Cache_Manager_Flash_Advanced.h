@@ -49,10 +49,12 @@ namespace SSD_Components
 		unsigned int memory_footprint = 0;
 		unsigned int max_memory_footprint = 0;
 		int n_memory_channels_used = 0;
-		unsigned int total_dram_access_size = 0;
+		uint64_t total_dram_access_size = 0;
 		bool first_dram_access = true;
 		sim_time_type total_dram_access_time = 0, total_dram_idle_time = 0, last_dram_access_time = 0;
-		
+		sim_time_type first_tr_issue_time;
+		bool first_tr_serviced = false;
+
 		void process_new_user_request(User_Request* user_request);
 		void write_to_destage_buffer(User_Request* user_request);//Used in the WRITE_CACHE and WRITE_READ_CACHE modes in which the DRAM space is used as a destage buffer
 		std::queue<Memory_Transfer_Info*>* dram_execution_queue;//The list of DRAM transfers that are waiting to be executed
