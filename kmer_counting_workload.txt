@@ -1,8 +1,9 @@
-read_size = 1024 #MB
-n_reader = 16
-n_pages_per_merge = [2, 4, 23, ... , 15] # len = n_reader
-n_smer = 16
-n_merges_per_write = [1, 2, 2, ..., 2] # len = n_smer
-n_writes_per_migration = [1, ..., 0] # len = n_smer
-
-n_counts_per_merge = [2, 3, ..., 13] # len = n_smer
+# Phase 1
+n_readers = 16
+read_size = 2048
+n_page_reads_per_merge = 1
+n_smer = 2048
+n_merges_per_write = 4
+n_writes_per_migration = 100
+# Phase 2
+n_counts_per_merge = 128
