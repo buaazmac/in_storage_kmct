@@ -119,6 +119,21 @@ namespace NVM
 			else {
 				targetDie->Expected_finish_time = Simulator->Time() + Get_command_execution_latency(command->CommandCode, command->Address[0].PageID);
 			}
+			// [ISP] chip-level statistics
+			n_commands++;
+			if (command->CommandCode == CMD_READ_PAGE) {
+				n_read_commands++;
+			}
+			else if (command->CommandCode == CMD_PROGRAM_PAGE) {
+				n_write_commands++;
+			}
+			else if (command->CommandCode == CMD_ISP_BUFFER_READ) {
+				n_bread_commands++;
+			}
+			if (targetDie->Expected_finish_time > max_time) {
+				max_time = targetDie->Expected_finish_time;
+			}
+			
 			DEBUG_ISP("[start_command_execution] " << command->Address[0].ChannelID 
 						<< "-" << command->Address[0].ChipID << "-" << command->Address[0].DieID 
 						<< "-" << command->Address[0].PageID << "-" << command->Address[0].PlaneID 

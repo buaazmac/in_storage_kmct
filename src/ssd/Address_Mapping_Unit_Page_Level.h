@@ -18,9 +18,6 @@ namespace SSD_Components
 
 	enum class CMTEntryStatus {FREE, WAITING, VALID};
 
-	// [ISP]
-	static bool in_storage_processing_amu = true;
-
 	struct GTDEntryType //Entry type for the Global Translation Directory
 	{
 		MPPN_type MPPN;
@@ -100,7 +97,7 @@ namespace SSD_Components
 		GMTEntryType* GlobalMappingTable;
 		void Update_mapping_info(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa, const PPA_type ppa, const page_status_type page_status_bitmap);
 		page_status_type Get_page_status(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa);
-		PPA_type Get_ppa(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa);
+		PPA_type Get_ppa(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa, bool in_storage_processing_amu);
 		PPA_type Get_ppa_for_preconditioning(const stream_id_type stream_id, const LPA_type lpa);
 		bool Mapping_entry_accessible(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa);
 	

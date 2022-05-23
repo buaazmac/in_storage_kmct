@@ -32,6 +32,8 @@ namespace NVM
 			flash_chip_ID_type ChipID;         //Flashchip position in its related channel
 			sim_time_type isp_bandwidth = 1; // [ISP] bandwidth for read/write data to/from ISP buffer (byte/cycle) - 128 MB/s
 			sim_time_type compute_bandwidth_per_unit = 2; // [ISP] bandwidth for computing a 64-bit (16-byte) unit - 256 MB/s
+			uint64_t n_commands = 0, n_read_commands = 0, n_write_commands = 0, n_bread_commands = 0; // [ISP] statistics of executed commands
+			sim_time_type max_time = 0; // [ISP] the maximum expected time of the chip
 
 			void StartCMDXfer()
 			{

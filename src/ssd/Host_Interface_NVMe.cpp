@@ -259,6 +259,8 @@ void Input_Stream_Manager_NVMe::segment_user_request(User_Request *user_request)
 		lsa = lsa + transaction_size;
 		handled_sectors_count += transaction_size;
 	}
+
+
 }
 
 Request_Fetch_Unit_NVMe::Request_Fetch_Unit_NVMe(Host_Interface_Base *host_interface) : Request_Fetch_Unit_Base(host_interface), current_phase(0xffff), number_of_sent_cqe(0) {}

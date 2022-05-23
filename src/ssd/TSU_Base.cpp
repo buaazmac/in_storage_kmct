@@ -96,6 +96,9 @@ namespace SSD_Components
 						continue;
 					}
 				}
+				else {
+					//DEBUG("This traction should wait...");
+				}
 				it++;
 			}
 

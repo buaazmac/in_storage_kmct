@@ -280,6 +280,9 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 																	  parameters->Flash_Parameters.Block_No_Per_Plane, parameters->Flash_Parameters.Page_No_Per_Block,
 																	  parameters->Flash_Parameters.Page_Capacity / SECTOR_SIZE_IN_BYTE, parameters->Flash_Parameters.Page_Capacity, parameters->Overprovisioning_Ratio,
 																	  parameters->CMT_Sharing_Mode);
+			if ((*io_flows)[0]->Device_Level_Data_Caching_Mode == SSD_Components::Caching_Mode::IN_STORAGE_PROCESSING) {
+				amu->in_storage_processing_amu = true;
+			}
 			break;
 		case SSD_Components::Flash_Address_Mapping_Type::HYBRID:
 			amu = new SSD_Components::Address_Mapping_Unit_Hybrid(ftl->ID() + ".AddressMappingUnit", ftl, (SSD_Components::NVM_PHY_ONFI *)device->PHY,
@@ -377,10 +380,20 @@ SSD_Device::SSD_Device(Device_Parameter_Set *parameters, std::vector<IO_Flow_Par
 
 SSD_Device::~SSD_Device()
 {
+	std::cout << "\n ---------------- Chip-level Statistics ---------------\n";
+	std::cout << "Chip\t#Cmd\t#ReadCmd\t#WriteCmd\t#IspCmd\tMaxTime\n";
+
 	for (unsigned int channel_cntr = 0; channel_cntr < Channel_count; channel_cntr++)
 	{
 		for (unsigned int chip_cntr = 0; chip_cntr < Chip_no_per_channel; chip_cntr++)
 		{
+			std::cout << "Channel-" << channel_cntr << "-" << chip_cntr << "\t"
+				<< ((SSD_Components::ONFI_Channel_NVDDR2*)this->Channels[channel_cntr])->Chips[chip_cntr]->n_commands << "\t"
+				<< ((SSD_Components::ONFI_Channel_NVDDR2*)this->Channels[channel_cntr])->Chips[chip_cntr]->n_read_commands << "\t"
+				<< ((SSD_Components::ONFI_Channel_NVDDR2*)this->Channels[channel_cntr])->Chips[chip_cntr]->n_write_commands << "\t"
+				<< ((SSD_Components::ONFI_Channel_NVDDR2*)this->Channels[channel_cntr])->Chips[chip_cntr]->n_bread_commands << "\t"
+				<< ((SSD_Components::ONFI_Channel_NVDDR2*)this->Channels[channel_cntr])->Chips[chip_cntr]->max_time << std::endl;
+
 			delete ((SSD_Components::ONFI_Channel_NVDDR2 *)this->Channels[channel_cntr])->Chips[chip_cntr];
 		}
 		delete this->Channels[channel_cntr];

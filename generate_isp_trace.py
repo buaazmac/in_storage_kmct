@@ -101,12 +101,15 @@ for channel in range(n_channels):
 for batch in range(int(n_batches / combine_factor)):
     for channel in range(n_channels):
         for chip in range(n_chips_per_channel):
+            
             if pe_level == "channel":
                 chip = 0
             start_lsa = channel * n_chips_per_channel * n_dies_per_chip * n_planes_per_die * n_blocks_per_plane * n_pages_per_block * n_sectors_per_page \
                         + chip * n_dies_per_chip * n_planes_per_die * n_blocks_per_plane * n_pages_per_block * n_sectors_per_page
             trace = Trace(start_time, 2, start_lsa, page_capacity / sector_size_in_byte * combine_factor, 1)
             traces.append(trace)
+
+            print(channel,chip,int(start_lsa))
             # if batch in merge_batches[channel][chip]:
             #     trace = Trace(start_time, 2, start_lsa, page_capacity / sector_size_in_byte * combine_factor, 0)
             #     traces.append(trace)
@@ -114,6 +117,7 @@ for batch in range(int(n_batches / combine_factor)):
             #     trace = Trace(start_time, 2, start_lsa, write_batches[channel][chip][batch] / sector_size_in_byte, 0)
             #     traces.append(trace)
     start_time += 75000
+exit()
 with open('./traces/isp-test-phase1.trace', 'w') as f:
     for trace in traces:
         f.write(trace.get_str() + "\n")

@@ -265,7 +265,7 @@ namespace SSD_Components
 		}
 	}
 
-	inline PPA_type AddressMappingDomain::Get_ppa(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa)
+	inline PPA_type AddressMappingDomain::Get_ppa(const bool ideal_mapping, const stream_id_type stream_id, const LPA_type lpa, bool in_storage_processing_amu)
 	{
 		if (ideal_mapping) {
 			// [ISP] we make a trick here to skip the address mapping
@@ -524,7 +524,8 @@ namespace SSD_Components
 		// [ISP] We don't need to check the original mapping table for ISP operations?
 		// TODO: we need to create a mapping table ISP data
 		bool is_isp = false;
-		if (transaction->UserIORequest->Type != UserRequestType::READ &&
+		if (transaction->UserIORequest != NULL &&
+			transaction->UserIORequest->Type != UserRequestType::READ &&
 			transaction->UserIORequest->Type != UserRequestType::WRITE) {
 			is_isp = true;
 		}
@@ -605,7 +606,7 @@ namespace SSD_Components
 	{
 		PPA_type ppa;
 		if (transaction->Type == Transaction_Type::READ || transaction->Type == Transaction_Type::WRITE) {
-			ppa = domains[streamID]->Get_ppa(ideal_mapping_table, streamID, transaction->LPA);
+			ppa = domains[streamID]->Get_ppa(ideal_mapping_table, streamID, transaction->LPA, in_storage_processing_amu);
 			// [ISP DEBUG]
 			//std::cout << "LPA: " << transaction->LPA << ", PPA: " << ppa << std::endl;
 		}
@@ -627,13 +628,18 @@ namespace SSD_Components
 			
 			return true;
 		} else if (transaction->Type == Transaction_Type::WRITE) {//This is a write transaction
-			allocate_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction);
-			//there are too few free pages remaining only for GC
+			
 			if (!in_storage_processing_amu) {
+				allocate_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction);
+				//there are too few free pages remaining only for GC
 				if (ftl->GC_and_WL_Unit->Stop_servicing_writes(transaction->Address)) {
 					return false;
 				}
 				allocate_page_in_plane_for_user_write((NVM_Transaction_Flash_WR*)transaction, false);
+			}
+			else {
+				transaction->PPA = ppa;
+				Convert_ppa_to_address(transaction->PPA, transaction->Address);
 			}
 			transaction->Physical_address_determined = true;
 			
@@ -1185,7 +1191,7 @@ namespace SSD_Components
 	void Address_Mapping_Unit_Page_Level::allocate_page_in_plane_for_user_write(NVM_Transaction_Flash_WR* transaction, bool is_for_gc)
 	{
 		AddressMappingDomain* domain = domains[transaction->Stream_id];
-		PPA_type old_ppa = domain->Get_ppa(ideal_mapping_table, transaction->Stream_id, transaction->LPA);
+		PPA_type old_ppa = domain->Get_ppa(ideal_mapping_table, transaction->Stream_id, transaction->LPA, in_storage_processing_amu);
 
 		if (old_ppa == NO_PPA)  /*this is the first access to the logical page*/
 		{
@@ -1427,7 +1433,7 @@ namespace SSD_Components
 	inline void Address_Mapping_Unit_Page_Level::Get_data_mapping_info_for_gc(const stream_id_type stream_id, const LPA_type lpa, PPA_type& ppa, page_status_type& page_state)
 	{
 		if (domains[stream_id]->Mapping_entry_accessible(ideal_mapping_table, stream_id, lpa)) {
-			ppa = domains[stream_id]->Get_ppa(ideal_mapping_table, stream_id, lpa);
+			ppa = domains[stream_id]->Get_ppa(ideal_mapping_table, stream_id, lpa, in_storage_processing_amu);
 			page_state = domains[stream_id]->Get_page_status(ideal_mapping_table, stream_id, lpa);
 		} else {
 			ppa = domains[stream_id]->GlobalMappingTable[lpa].PPA;
