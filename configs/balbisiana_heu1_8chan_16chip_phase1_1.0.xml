@@ -4,11 +4,11 @@
 			<Priority_Class>HIGH</Priority_Class>
 			<Device_Level_Data_Caching_Mode>In_STORAGE_PROCESSING</Device_Level_Data_Caching_Mode>
 			<Channel_IDs>0,1,2,3,4,5,6,7</Channel_IDs>
-			<Chip_IDs>0,1,2,3</Chip_IDs>
+			<Chip_IDs>0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15</Chip_IDs>
 			<Die_IDs>0,1</Die_IDs>
 			<Plane_IDs>0,1</Plane_IDs>
 			<Initial_Occupancy_Percentage>70</Initial_Occupancy_Percentage>
-			<File_Path>traces/trace/balbisiana/1.0/phase_one/8chan_4chip/balbisiana_heu1_8chan_4chip_phase1_1.0.trace</File_Path>
+			<File_Path>traces/trace/balbisiana/1.0/phase_one/8chan_16chip/balbisiana_heu1_8chan_16chip_phase1_1.0.trace</File_Path>
 			<Percentage_To_Be_Executed>100</Percentage_To_Be_Executed>
 			<Relay_Count>1</Relay_Count>
 			<Time_Unit>NANOSECOND</Time_Unit>
