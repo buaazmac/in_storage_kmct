@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-import sys
+import sys, os
 
 workload_file = sys.argv[1]
 
@@ -12,7 +12,9 @@ methods = ["heu1", "RR", "rand"]
 
 archs = ["8chan_4chip", "32chan_4chip", "8chan_16chip"]
 
-phases = ["phase1"]
+phases = ["phase2"]
+
+sram_sizes = ["128KB", "512KB", "2048KB"]
 
 tags = ["1.0"]
 
@@ -37,10 +39,26 @@ for tag in tags:
                     sh.text = ','.join([str(i) for i in range(16)])
 
                 for phase in phases:
-                    phase_folder = 'phase_one'
-                    trace_file = 'traces/trace/%s/%s/%s/%s/%s_%s_%s_%s_%s.trace' % (workload, tag, phase_folder, arch, workload, method, arch, phase, tag)
-                    sh = tree.find('IO_Scenario').find('IO_Flow_Parameter_Set_Trace_Based').find('File_Path')
-                    sh.text = trace_file
-                    config_file = 'configs/%s_%s_%s_%s_%s.xml' % (workload, method, arch, phase, tag)
-                    with open(config_file, 'wb') as f:
-                        f.write(ET.tostring(root))
+                    if phase == "phase1":
+                        phase_folder = 'phase_one'
+                        trace_file = 'traces/trace/%s/%s/%s/%s/%s_%s_%s_%s_%s.trace' % (workload, tag, phase_folder, arch, workload, method, arch, phase, tag)
+                        if not os.path.exists(trace_file):
+                            print(trace_file, "does not exist")
+                            continue
+                        sh = tree.find('IO_Scenario').find('IO_Flow_Parameter_Set_Trace_Based').find('File_Path')
+                        sh.text = trace_file
+                        config_file = 'configs/%s_%s_%s_%s_%s.xml' % (workload, method, arch, phase, tag)
+                        with open(config_file, 'wb') as f:
+                            f.write(ET.tostring(root))
+                    elif phase == "phase2":
+                        phase_folder = 'phase_two'
+                        for sram_size in sram_sizes:
+                            trace_file = 'traces/trace/%s/%s/%s/%s/%s_%s_%ss_%s_%s_%s.trace' % (workload, tag, phase_folder, arch, workload, method, arch, sram_size, phase, tag)
+                            if not os.path.exists(trace_file):
+                                print(trace_file, "does not exist")
+                                continue
+                            sh = tree.find('IO_Scenario').find('IO_Flow_Parameter_Set_Trace_Based').find('File_Path')
+                            sh.text = trace_file
+                            config_file = 'configs/%s_%s_%s_%s_%s_%s.xml' % (workload, method, arch, sram_size, phase, tag)
+                            with open(config_file, 'wb') as f:
+                                f.write(ET.tostring(root))
